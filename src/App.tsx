@@ -187,9 +187,21 @@ export default function App() {
   const [isFetchingLive, setIsFetchingLive] = useState(false)
   const [liveError, setLiveError] = useState<string | null>(null)
   const [lastLivePoll, setLastLivePoll] = useState<Date | null>(null)
+  const [dbEngine, setDbEngine] = useState<string>('PostgreSQL 17 / SQLite')
   const pollingRef = useRef<number | null>(null)
 
   const user = store.users.find(u => u.id === userId && u.active) ?? null
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then((data: { database?: { engine?: string } }) => {
+        if (data?.database?.engine) {
+          setDbEngine(data.database.engine);
+        }
+      })
+      .catch(() => {});
+  }, [])
 
   useEffect(() => { localStorage.setItem(KEY, JSON.stringify(store)) }, [store])
   useEffect(() => {
@@ -1342,14 +1354,14 @@ export default function App() {
             <div className="panel">
               <div className="panel-heading"><div><h2>Workspace & Backend</h2><p>System configuration status</p></div><Settings size={19}/></div>
               <div className="setting-item"><span>Current mode</span><strong>{mode === 'live' ? 'Live Telemetry Ingestion' : 'Demo Simulation'}</strong></div>
-              <div className="setting-item"><span>Database engine</span><StatusBadge status="SQLite (node:sqlite)"/></div>
+              <div className="setting-item"><span>Database engine</span><StatusBadge status={dbEngine}/></div>
               <div className="setting-item"><span>Session security</span><StatusBadge status="HMAC-SHA256 Token"/></div>
               <div className="setting-item"><span>Hardware ingestion</span><StatusBadge status={mode === 'live' ? 'Listening on /api/v1' : 'Simulated'}/></div>
               <button className="btn btn-outline" onClick={()=>{const blob=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='greenfield-data.json';a.click();URL.revokeObjectURL(url);notify('Data export downloaded')}}><Download size={16}/> Export data</button>
             </div>
             <div className="panel danger-panel">
               <div className="panel-heading"><div><h2>Reset demo workspace</h2><p>Restore initial sample records.</p></div><RefreshCw size={19}/></div>
-              <p>Restores initial demo records without deleting ingested database readings in SQLite.</p>
+              <p>Restores initial demo records without deleting ingested database readings in database storage.</p>
               <button className="btn btn-danger" onClick={() => setModal('reset')}>Reset demo workspace</button>
             </div>
           </div>

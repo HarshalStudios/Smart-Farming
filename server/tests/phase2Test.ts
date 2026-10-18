@@ -24,19 +24,19 @@ async function runPhase2Tests() {
   console.log('Test Group 1: Database & Schemas');
   try {
     const db = getDb();
-    const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all() as { name: string }[];
-    const tableNames = tables.map(t => t.name);
-
-    assert(tableNames.includes('users'), 'Table "users" exists in SQLite');
-    assert(tableNames.includes('farms'), 'Table "farms" exists in SQLite');
-    assert(tableNames.includes('devices'), 'Table "devices" exists in SQLite');
-    assert(tableNames.includes('telemetry_readings'), 'Table "telemetry_readings" exists in SQLite');
-
-    const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as { c: number }).c;
+    const userCountRow = await db.queryOne<{ c: number | string }>('SELECT COUNT(*) as c FROM users');
+    const userCount = Number(userCountRow?.c || 0);
     assert(userCount >= 5, `Initial users seeded correctly (found ${userCount} users, expected >= 5)`);
 
-    const farmCount = (db.prepare('SELECT COUNT(*) as c FROM farms').get() as { c: number }).c;
+    const farmCountRow = await db.queryOne<{ c: number | string }>('SELECT COUNT(*) as c FROM farms');
+    const farmCount = Number(farmCountRow?.c || 0);
     assert(farmCount >= 3, `Initial farms seeded correctly (found ${farmCount} farms, expected >= 3)`);
+
+    const devCountRow = await db.queryOne<{ c: number | string }>('SELECT COUNT(*) as c FROM devices');
+    assert(Number(devCountRow?.c || 0) >= 2, 'Table "devices" initialized and seeded');
+
+    const readingCountRow = await db.queryOne<{ c: number | string }>('SELECT COUNT(*) as c FROM telemetry_readings');
+    assert(readingCountRow !== null, 'Table "telemetry_readings" initialized');
   } catch (err: unknown) {
     assert(false, 'Database initialization', (err as Error).message);
   }
@@ -81,26 +81,27 @@ async function runPhase2Tests() {
     // Device token rotation test in DB
     const db = getDb();
     const testDeviceId = 'ESP32-PN-TEST';
-    db.prepare(`
-      INSERT OR REPLACE INTO devices (id, name, farm_id, hardware_type, token_hash, status, battery_pct, last_seen_at, created_at)
-      VALUES (?, 'Test Node', 'f1', 'ESP32', ?, 'Offline', 100, NULL, ?)
-    `).run(testDeviceId, tokenHash, new Date().toISOString());
+    await db.query('DELETE FROM devices WHERE id = $1', [testDeviceId]);
+    await db.query(`
+      INSERT INTO devices (id, name, farm_id, hardware_type, token_hash, status, battery_pct, last_seen_at, created_at)
+      VALUES ($1, 'Test Node', 'f1', 'ESP32', $2, 'Offline', 100, NULL, $3)
+    `, [testDeviceId, tokenHash, new Date().toISOString()]);
 
-    const found = db.prepare('SELECT id FROM devices WHERE token_hash = ?').get(tokenHash) as { id: string } | undefined;
+    const found = await db.queryOne<{ id: string }>('SELECT id FROM devices WHERE token_hash = $1', [tokenHash]);
     assert(found?.id === testDeviceId, 'Device lookup via hashed token succeeds');
 
     // Rotate token
     const rotated = generateDeviceToken();
-    db.prepare('UPDATE devices SET token_hash = ? WHERE id = ?').run(rotated.tokenHash, testDeviceId);
+    await db.query('UPDATE devices SET token_hash = $1 WHERE id = $2', [rotated.tokenHash, testDeviceId]);
 
-    const oldLookup = db.prepare('SELECT id FROM devices WHERE token_hash = ?').get(tokenHash);
-    const newLookup = db.prepare('SELECT id FROM devices WHERE token_hash = ?').get(rotated.tokenHash) as { id: string } | undefined;
+    const oldLookup = await db.queryOne<{ id: string }>('SELECT id FROM devices WHERE token_hash = $1', [tokenHash]);
+    const newLookup = await db.queryOne<{ id: string }>('SELECT id FROM devices WHERE token_hash = $1', [rotated.tokenHash]);
 
     assert(!oldLookup, 'Old device token is immediately revoked upon rotation');
     assert(newLookup?.id === testDeviceId, 'Rotated device token authenticates the device');
 
     // Clean up test device
-    db.prepare('DELETE FROM devices WHERE id = ?').run(testDeviceId);
+    await db.query('DELETE FROM devices WHERE id = $1', [testDeviceId]);
   } catch (err: unknown) {
     assert(false, 'Device token suite', (err as Error).message);
   }

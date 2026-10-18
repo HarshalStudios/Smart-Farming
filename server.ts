@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getDb, getDevDeviceToken } from './server/db/database';
+import { initDatabase, getDb, getDevDeviceToken } from './server/db/database';
 import authRoutes from './server/routes/authRoutes';
 import deviceRoutes from './server/routes/deviceRoutes';
 import telemetryRoutes from './server/routes/telemetryRoutes';
@@ -16,18 +16,19 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production') || process.argv.includes('--prod');
 
-// Initialize database
-const db = getDb();
-
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 // Health and readiness check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   try {
-    const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
-    const deviceCount = (db.prepare('SELECT COUNT(*) as count FROM devices').get() as { count: number }).count;
-    const readingCount = (db.prepare('SELECT COUNT(*) as count FROM telemetry_readings').get() as { count: number }).count;
+    const db = getDb();
+    const userCountRow = await db.queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM users');
+    const deviceCountRow = await db.queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM devices');
+    const readingCountRow = await db.queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM telemetry_readings');
+
+    const engine = db.getEngine();
+    const engineLabel = engine === 'postgresql' ? 'PostgreSQL 17 (Hostless)' : 'SQLite (node:sqlite)';
 
     res.json({
       status: 'ok',
@@ -36,11 +37,11 @@ app.get('/api/health', (req, res) => {
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       database: {
-        engine: 'SQLite (node:sqlite)',
+        engine: engineLabel,
         status: 'connected',
-        usersCount: userCount,
-        devicesCount: deviceCount,
-        telemetryRecords: readingCount
+        usersCount: Number(userCountRow?.count || 0),
+        devicesCount: Number(deviceCountRow?.count || 0),
+        telemetryRecords: Number(readingCountRow?.count || 0)
       },
       environment: isProduction ? 'production' : 'development'
     });
@@ -100,6 +101,9 @@ app.use('/api/farms', farmRoutes);
 
 // Frontend integration: Vite dev middleware in dev, static serving in prod
 async function setupFrontend() {
+  // Initialize database first
+  await initDatabase();
+
   if (!isProduction) {
     const { createServer } = await import('vite');
     const vite = await createServer({
@@ -122,9 +126,11 @@ async function setupFrontend() {
   app.listen(PORT, HOST, () => {
     console.log(`[SmartFarm API] Unified server running at http://${HOST}:${PORT}`);
     console.log(`[SmartFarm API] Environment: ${isProduction ? 'production' : 'development'}`);
-    const token = getDevDeviceToken();
-    if (token) {
-      console.log(`[SmartFarm API] Seed device token (ESP32-PN-001): ${token}`);
+    if (!isProduction) {
+      const token = getDevDeviceToken();
+      if (token) {
+        console.log(`[SmartFarm API] Seed device token (ESP32-PN-001): ${token}`);
+      }
     }
   });
 }

@@ -6,7 +6,7 @@ import { validateTelemetryPayload } from '../contracts/telemetryContract';
 const router = Router();
 
 // POST /api/v1/telemetry/ingest - Secure ESP32 Telemetry Ingestion Endpoint
-router.post('/ingest', requireDeviceAuth, (req: AuthenticatedRequest, res: Response) => {
+router.post('/ingest', requireDeviceAuth, async (req: AuthenticatedRequest, res: Response) => {
   const validation = validateTelemetryPayload(req.body);
 
   if (!validation.valid || !validation.data) {
@@ -52,7 +52,7 @@ router.post('/ingest', requireDeviceAuth, (req: AuthenticatedRequest, res: Respo
   const rainPeriodSecs = payload.rain_gauge.accumulation_period_seconds || 60;
 
   try {
-    const insertStmt = db.prepare(`
+    const insertSql = `
       INSERT INTO telemetry_readings (
         device_id, farm_id, recorded_at, ingested_at,
         air_temperature_c, relative_humidity_pct,
@@ -60,10 +60,17 @@ router.post('/ingest', requireDeviceAuth, (req: AuthenticatedRequest, res: Respo
         electrical_conductivity_ds_m, nitrogen_kg_ha, phosphorus_kg_ha, potassium_kg_ha,
         rain_pulses, rain_accumulation_mm, rain_duration_seconds,
         modbus_valid, sht40_valid, rain_valid, raw_payload
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+      ) VALUES (
+        $1, $2, $3, $4,
+        $5, $6,
+        $7, $8, $9,
+        $10, $11, $12, $13,
+        $14, $15, $16,
+        $17, $18, $19, $20
+      ) RETURNING id
+    `;
 
-    const result = insertStmt.run(
+    const insertResult = await db.query<{ id: number | string }>(insertSql, [
       device.id,
       device.farm_id,
       payload.timestamp,
@@ -80,20 +87,24 @@ router.post('/ingest', requireDeviceAuth, (req: AuthenticatedRequest, res: Respo
       rainPulses,
       rainAccumulation,
       rainPeriodSecs,
-      payload.modbus.valid ? 1 : 0,
-      payload.sht40.valid ? 1 : 0,
-      payload.rain_gauge.valid ? 1 : 0,
+      payload.modbus.valid ? true : false,
+      payload.sht40.valid ? true : false,
+      payload.rain_gauge.valid ? true : false,
       JSON.stringify(payload)
-    );
+    ]);
+
+    const readingId = Number(insertResult.rows[0]?.id || 0);
 
     // Update device heartbeat and status
     const batteryPct = payload.diagnostics?.battery_pct !== undefined ? payload.diagnostics.battery_pct : device.battery_pct;
-    db.prepare('UPDATE devices SET status = ?, battery_pct = ?, last_seen_at = ? WHERE id = ?')
-      .run('Online', batteryPct, ingestedAt, device.id);
+    await db.query(
+      'UPDATE devices SET status = $1, battery_pct = $2, last_seen_at = $3 WHERE id = $4',
+      ['Online', batteryPct, ingestedAt, device.id]
+    );
 
     res.status(201).json({
       status: 'success',
-      readingId: result.lastInsertRowid,
+      readingId,
       deviceId: device.id,
       recordedAt: payload.timestamp,
       ingestedAt,
@@ -109,110 +120,122 @@ router.post('/ingest', requireDeviceAuth, (req: AuthenticatedRequest, res: Respo
 });
 
 // GET /api/v1/telemetry/latest - Query latest valid reading for a farm or device
-router.get('/latest', requireUserAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/latest', requireUserAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { deviceId, farmId } = req.query;
   const db = getDb();
 
-  let query = 'SELECT * FROM telemetry_readings WHERE 1=1';
-  const params: (string | number)[] = [];
+  try {
+    let query = 'SELECT * FROM telemetry_readings WHERE 1=1';
+    const params: (string | number)[] = [];
+    let pIndex = 1;
 
-  if (deviceId && typeof deviceId === 'string') {
-    const devId = deviceId.trim();
-    // Enforce device access permission for non-admins
-    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
-      const dev = db.prepare('SELECT farm_id FROM devices WHERE id = ?').get(devId) as { farm_id: string } | undefined;
-      if (!dev || !req.user!.farmIds.includes(dev.farm_id)) {
-        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for device ${devId}` });
-        return;
+    if (deviceId && typeof deviceId === 'string') {
+      const devId = deviceId.trim();
+      // Enforce device access permission for non-admins
+      if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+        const dev = await db.queryOne<{ farm_id: string }>('SELECT farm_id FROM devices WHERE id = $1', [devId]);
+        if (!dev || !req.user!.farmIds.includes(dev.farm_id)) {
+          res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for device ${devId}` });
+          return;
+        }
+      }
+      query += ` AND device_id = $${pIndex++}`;
+      params.push(devId);
+    } else if (farmId && typeof farmId === 'string') {
+      const fId = farmId.trim();
+      // Enforce farm access permission for non-admins
+      if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+        if (!req.user!.farmIds.includes(fId)) {
+          res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for farm ${fId}` });
+          return;
+        }
+      }
+      query += ` AND farm_id = $${pIndex++}`;
+      params.push(fId);
+    } else {
+      // If neither specified, fetch latest across user's assigned farms
+      if (req.user!.role !== 'Admin') {
+        const userFarms = req.user!.farmIds;
+        if (userFarms.length === 0) {
+          res.json({ reading: null });
+          return;
+        }
+        const placeholders = userFarms.map(() => `$${pIndex++}`).join(', ');
+        query += ` AND farm_id IN (${placeholders})`;
+        params.push(...userFarms);
       }
     }
-    query += ' AND device_id = ?';
-    params.push(devId);
-  } else if (farmId && typeof farmId === 'string') {
-    const fId = farmId.trim();
-    // Enforce farm access permission for non-admins
-    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
-      if (!req.user!.farmIds.includes(fId)) {
-        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for farm ${fId}` });
-        return;
-      }
-    }
-    query += ' AND farm_id = ?';
-    params.push(fId);
-  } else {
-    // If neither specified, fetch latest across user's assigned farms
-    if (req.user!.role !== 'Admin') {
-      const userFarms = req.user!.farmIds;
-      if (userFarms.length === 0) {
-        res.json({ reading: null });
-        return;
-      }
-      query += ` AND farm_id IN (${userFarms.map(() => '?').join(',')})`;
-      params.push(...userFarms);
-    }
+
+    query += ' ORDER BY recorded_at DESC LIMIT 1';
+    const reading = await db.queryOne<DbTelemetryReading>(query, params);
+
+    res.json({ reading: reading || null });
+  } catch (err: unknown) {
+    res.status(500).json({ error: 'Database Error', message: (err as Error).message });
   }
-
-  query += ' ORDER BY recorded_at DESC LIMIT 1';
-  const reading = db.prepare(query).get(...params) as DbTelemetryReading | undefined;
-
-  res.json({ reading: reading || null });
 });
 
 // GET /api/v1/telemetry/history - Query historical time-series readings
-router.get('/history', requireUserAuth, (req: AuthenticatedRequest, res: Response) => {
+router.get('/history', requireUserAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { deviceId, farmId, hours, limit } = req.query;
   const db = getDb();
 
-  const maxHours = Math.min(Math.max(Number(hours) || 24, 1), 720); // between 1 hour and 30 days
-  const maxLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
-  const cutoffTime = new Date(Date.now() - maxHours * 60 * 60 * 1000).toISOString();
+  try {
+    const maxHours = Math.min(Math.max(Number(hours) || 24, 1), 720); // between 1 hour and 30 days
+    const maxLimit = Math.min(Math.max(Number(limit) || 100, 1), 1000);
+    const cutoffTime = new Date(Date.now() - maxHours * 60 * 60 * 1000).toISOString();
 
-  let query = 'SELECT * FROM telemetry_readings WHERE recorded_at >= ?';
-  const params: (string | number)[] = [cutoffTime];
+    let query = 'SELECT * FROM telemetry_readings WHERE recorded_at >= $1';
+    const params: (string | number)[] = [cutoffTime];
+    let pIndex = 2;
 
-  if (deviceId && typeof deviceId === 'string') {
-    const devId = deviceId.trim();
-    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
-      const dev = db.prepare('SELECT farm_id FROM devices WHERE id = ?').get(devId) as { farm_id: string } | undefined;
-      if (!dev || !req.user!.farmIds.includes(dev.farm_id)) {
-        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for device ${devId}` });
-        return;
+    if (deviceId && typeof deviceId === 'string') {
+      const devId = deviceId.trim();
+      if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+        const dev = await db.queryOne<{ farm_id: string }>('SELECT farm_id FROM devices WHERE id = $1', [devId]);
+        if (!dev || !req.user!.farmIds.includes(dev.farm_id)) {
+          res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for device ${devId}` });
+          return;
+        }
+      }
+      query += ` AND device_id = $${pIndex++}`;
+      params.push(devId);
+    } else if (farmId && typeof farmId === 'string') {
+      const fId = farmId.trim();
+      if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+        if (!req.user!.farmIds.includes(fId)) {
+          res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for farm ${fId}` });
+          return;
+        }
+      }
+      query += ` AND farm_id = $${pIndex++}`;
+      params.push(fId);
+    } else {
+      // If neither specified, limit non-admins to their assigned farms
+      if (req.user!.role !== 'Admin') {
+        const userFarms = req.user!.farmIds;
+        if (userFarms.length === 0) {
+          res.json({ count: 0, windowHours: maxHours, readings: [] });
+          return;
+        }
+        const placeholders = userFarms.map(() => `$${pIndex++}`).join(', ');
+        query += ` AND farm_id IN (${placeholders})`;
+        params.push(...userFarms);
       }
     }
-    query += ' AND device_id = ?';
-    params.push(devId);
-  } else if (farmId && typeof farmId === 'string') {
-    const fId = farmId.trim();
-    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
-      if (!req.user!.farmIds.includes(fId)) {
-        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for farm ${fId}` });
-        return;
-      }
-    }
-    query += ' AND farm_id = ?';
-    params.push(fId);
-  } else {
-    // If neither specified, limit non-admins to their assigned farms
-    if (req.user!.role !== 'Admin') {
-      const userFarms = req.user!.farmIds;
-      if (userFarms.length === 0) {
-        res.json({ count: 0, windowHours: maxHours, readings: [] });
-        return;
-      }
-      query += ` AND farm_id IN (${userFarms.map(() => '?').join(',')})`;
-      params.push(...userFarms);
-    }
+
+    query += ` ORDER BY recorded_at ASC LIMIT $${pIndex++}`;
+    params.push(maxLimit);
+
+    const result = await db.query<DbTelemetryReading>(query, params);
+    res.json({
+      count: result.rows.length,
+      windowHours: maxHours,
+      readings: result.rows
+    });
+  } catch (err: unknown) {
+    res.status(500).json({ error: 'Database Error', message: (err as Error).message });
   }
-
-  query += ' ORDER BY recorded_at ASC LIMIT ?';
-  params.push(maxLimit);
-
-  const readings = db.prepare(query).all(...params) as unknown as DbTelemetryReading[];
-  res.json({
-    count: readings.length,
-    windowHours: maxHours,
-    readings
-  });
 });
 
 export default router;

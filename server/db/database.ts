@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import pg from 'pg';
 import { hashPassword, generateDeviceToken } from '../auth/security';
+
+const { Pool } = pg;
 
 export interface DbUser {
   id: string;
@@ -11,7 +14,7 @@ export interface DbUser {
   role: 'Admin' | 'Farmer' | 'Partner' | 'Technician';
   description: string;
   farm_ids: string; // JSON array of farm IDs
-  active: number;
+  active: boolean | number;
   created_at: string;
 }
 
@@ -34,7 +37,7 @@ export interface DbDevice {
   farm_id: string;
   hardware_type: string;
   token_hash: string;
-  status: 'Online' | 'Offline' | 'Maintenance';
+  status: 'Online' | 'Offline' | 'Needs attention' | 'Maintenance';
   battery_pct: number;
   last_seen_at: string | null;
   created_at: string;
@@ -58,36 +61,235 @@ export interface DbTelemetryReading {
   rain_pulses: number;
   rain_accumulation_mm: number;
   rain_duration_seconds: number;
-  modbus_valid: number;
-  sht40_valid: number;
-  rain_valid: number;
+  modbus_valid: boolean | number;
+  sht40_valid: boolean | number;
+  rain_valid: boolean | number;
   raw_payload: string | null;
 }
 
-let dbInstance: DatabaseSync | null = null;
+export interface DatabaseClient {
+  query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }>;
+  queryOne<T = any>(sql: string, params?: any[]): Promise<T | null>;
+  exec(sql: string): Promise<void>;
+  close(): Promise<void>;
+  getEngine(): 'postgresql' | 'sqlite';
+}
+
+let dbInstance: DatabaseClient | null = null;
 let devDeviceToken: string | null = null;
 
 export function getDevDeviceToken(): string | null {
   return devDeviceToken;
 }
 
-export function getDb(dbFilePath?: string): DatabaseSync {
-  if (dbInstance) return dbInstance;
+/**
+ * PostgreSQL Database Adapter backed by pg.Pool
+ */
+class PostgresDatabaseAdapter implements DatabaseClient {
+  private pool: pg.Pool;
 
-  const targetPath = dbFilePath || process.env.DATABASE_PATH || './data/greenfield.db';
+  constructor(connectionString: string) {
+    const useSsl = process.env.DATABASE_SSL !== 'false';
+    this.pool = new Pool({
+      connectionString,
+      ssl: useSsl ? { rejectUnauthorized: false } : false,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
 
-  if (targetPath !== ':memory:') {
-    const dir = path.dirname(path.resolve(targetPath));
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    this.pool.on('error', (err) => {
+      console.error('[PostgreSQL] Unexpected error on idle client:', err.message);
+    });
+  }
+
+  async query<T = any>(sql: string, params: any[] = []): Promise<{ rows: T[]; rowCount: number }> {
+    const res = await this.pool.query(sql, params);
+    return {
+      rows: res.rows as T[],
+      rowCount: res.rowCount ?? 0,
+    };
+  }
+
+  async queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+    const res = await this.query<T>(sql, params);
+    return res.rows.length > 0 ? res.rows[0] : null;
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.pool.query(sql);
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+
+  getEngine(): 'postgresql' {
+    return 'postgresql';
+  }
+}
+
+/**
+ * SQLite Fallback Adapter for local offline testing and CI
+ * Supports PostgreSQL-style $1, $2 placeholders and RETURNING id
+ */
+class SqliteDatabaseAdapter implements DatabaseClient {
+  private db: DatabaseSync;
+
+  constructor(dbFilePath?: string) {
+    const targetPath = dbFilePath || process.env.DATABASE_PATH || './data/greenfield.db';
+
+    if (targetPath !== ':memory:') {
+      const dir = path.dirname(path.resolve(targetPath));
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+
+    this.db = new DatabaseSync(targetPath);
+    this.db.exec('PRAGMA foreign_keys = ON;');
+  }
+
+  private transformPostgresSql(sql: string): { sql: string; hasReturningId: boolean } {
+    let cleanSql = sql;
+    let hasReturningId = false;
+
+    // Check for RETURNING id (case-insensitive)
+    if (/\breturning\s+id\b/i.test(cleanSql)) {
+      hasReturningId = true;
+      cleanSql = cleanSql.replace(/\breturning\s+id\b/gi, '').trim();
+    }
+
+    // Replace $1, $2, ... placeholders with ?
+    cleanSql = cleanSql.replace(/\$\d+/g, '?');
+
+    return { sql: cleanSql, hasReturningId };
+  }
+
+  async query<T = any>(sql: string, params: any[] = []): Promise<{ rows: T[]; rowCount: number }> {
+    const { sql: transformedSql, hasReturningId } = this.transformPostgresSql(sql);
+
+    // Normalize params (booleans to 1/0 for SQLite)
+    const normalizedParams = params.map(p => {
+      if (typeof p === 'boolean') return p ? 1 : 0;
+      return p;
+    });
+
+    const isSelect = /^\s*SELECT\b/i.test(transformedSql);
+
+    if (isSelect) {
+      const stmt = this.db.prepare(transformedSql);
+      const rows = stmt.all(...normalizedParams) as T[];
+      return { rows, rowCount: rows.length };
+    } else {
+      const stmt = this.db.prepare(transformedSql);
+      const result = stmt.run(...normalizedParams);
+      const rowCount = Number(result.changes);
+
+      if (hasReturningId) {
+        return {
+          rows: [{ id: Number(result.lastInsertRowid) } as unknown as T],
+          rowCount
+        };
+      }
+      return { rows: [], rowCount };
     }
   }
 
-  const db = new DatabaseSync(targetPath);
-  db.exec('PRAGMA foreign_keys = ON;');
+  async queryOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+    const res = await this.query<T>(sql, params);
+    return res.rows.length > 0 ? res.rows[0] : null;
+  }
 
-  // Run schema migrations
-  db.exec(`
+  async exec(sql: string): Promise<void> {
+    this.db.exec(sql);
+  }
+
+  async close(): Promise<void> {
+    this.db.close();
+  }
+
+  getEngine(): 'sqlite' {
+    return 'sqlite';
+  }
+}
+
+/**
+ * Initialize PostgreSQL Schema DDL (Idempotent)
+ */
+async function initializePostgresSchema(db: DatabaseClient): Promise<void> {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id VARCHAR(64) PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      role VARCHAR(32) NOT NULL CHECK (role IN ('Admin', 'Farmer', 'Partner', 'Technician')),
+      description TEXT,
+      farm_ids TEXT DEFAULT '[]',
+      active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS farms (
+      id VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      location VARCHAR(255) NOT NULL,
+      owner_id VARCHAR(64) NOT NULL,
+      area_ha DOUBLE PRECISION NOT NULL,
+      soil_type VARCHAR(128) NOT NULL,
+      field_count INTEGER NOT NULL DEFAULT 1,
+      primary_crop VARCHAR(128) NOT NULL,
+      status VARCHAR(64) NOT NULL DEFAULT 'Healthy',
+      created_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS devices (
+      id VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      farm_id VARCHAR(64) NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+      hardware_type VARCHAR(255) NOT NULL,
+      token_hash VARCHAR(128) NOT NULL,
+      status VARCHAR(64) NOT NULL DEFAULT 'Offline',
+      battery_pct DOUBLE PRECISION DEFAULT 100.0,
+      last_seen_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS telemetry_readings (
+      id BIGSERIAL PRIMARY KEY,
+      device_id VARCHAR(64) NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+      farm_id VARCHAR(64) NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+      recorded_at TIMESTAMPTZ NOT NULL,
+      ingested_at TIMESTAMPTZ NOT NULL,
+      air_temperature_c DOUBLE PRECISION,
+      relative_humidity_pct DOUBLE PRECISION,
+      soil_moisture_pct DOUBLE PRECISION,
+      soil_temperature_c DOUBLE PRECISION,
+      soil_ph DOUBLE PRECISION,
+      electrical_conductivity_ds_m DOUBLE PRECISION,
+      nitrogen_kg_ha DOUBLE PRECISION,
+      phosphorus_kg_ha DOUBLE PRECISION,
+      potassium_kg_ha DOUBLE PRECISION,
+      rain_pulses INTEGER DEFAULT 0,
+      rain_accumulation_mm DOUBLE PRECISION DEFAULT 0.0,
+      rain_duration_seconds INTEGER DEFAULT 60,
+      modbus_valid BOOLEAN NOT NULL DEFAULT TRUE,
+      sht40_valid BOOLEAN NOT NULL DEFAULT TRUE,
+      rain_valid BOOLEAN NOT NULL DEFAULT TRUE,
+      raw_payload TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_telemetry_device_time ON telemetry_readings(device_id, recorded_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_telemetry_farm_time ON telemetry_readings(farm_id, recorded_at DESC);
+  `);
+}
+
+/**
+ * Initialize SQLite Schema DDL (Idempotent)
+ */
+async function initializeSqliteSchema(db: DatabaseClient): Promise<void> {
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -155,57 +357,109 @@ export function getDb(dbFilePath?: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_telemetry_device_time ON telemetry_readings(device_id, recorded_at DESC);
     CREATE INDEX IF NOT EXISTS idx_telemetry_farm_time ON telemetry_readings(farm_id, recorded_at DESC);
   `);
-
-  // Seed baseline records if empty
-  seedBaselineData(db);
-
-  dbInstance = db;
-  return db;
 }
 
-function seedBaselineData(db: DatabaseSync): void {
-  const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count;
+/**
+ * Seed baseline demonstration data if database is empty.
+ * Never overwrites existing production data.
+ */
+async function seedBaselineData(db: DatabaseClient): Promise<void> {
+  const userCountRow = await db.queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM users');
+  const userCount = Number(userCountRow?.count || 0);
   const now = new Date().toISOString();
 
   if (userCount === 0) {
     const defaultPassword = 'SmartFarmPassword2026!';
     const defaultHash = hashPassword(defaultPassword);
 
-    const insertUser = db.prepare(`
-      INSERT INTO users (id, email, password_hash, name, role, description, farm_ids, active, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const userInserts = [
+      ['u-admin', 'admin@smartfarm.demo', defaultHash, 'Sumit Singh', 'Admin', 'Platform administrator', JSON.stringify(['f1', 'f2', 'f3'])],
+      ['u-pushkar', 'pushkar@smartfarm.demo', defaultHash, 'Pushkar Kandalgaonkar', 'Farmer', 'Shivneri Farm manager', JSON.stringify(['f1'])],
+      ['u-ramesh', 'ramesh@smartfarm.demo', defaultHash, 'Ramesh Patil', 'Farmer', 'Sahyadri Sheti operator', JSON.stringify(['f2'])],
+      ['u-priya', 'priya@smartfarm.demo', defaultHash, 'Priya Deshmukh', 'Partner', 'Agricultural advisor', JSON.stringify(['f1', 'f2'])],
+      ['u-amit', 'amit@smartfarm.demo', defaultHash, 'Amit Jadhav', 'Technician', 'IoT field technician', JSON.stringify(['f1', 'f2', 'f3'])],
+    ];
 
-    insertUser.run('u-admin', 'admin@smartfarm.demo', defaultHash, 'Sumit Singh', 'Admin', 'Platform administrator', JSON.stringify(['f1', 'f2', 'f3']), 1, now);
-    insertUser.run('u-pushkar', 'pushkar@smartfarm.demo', defaultHash, 'Pushkar Kandalgaonkar', 'Farmer', 'Shivneri Farm manager', JSON.stringify(['f1']), 1, now);
-    insertUser.run('u-ramesh', 'ramesh@smartfarm.demo', defaultHash, 'Ramesh Patil', 'Farmer', 'Sahyadri Sheti operator', JSON.stringify(['f2']), 1, now);
-    insertUser.run('u-priya', 'priya@smartfarm.demo', defaultHash, 'Priya Deshmukh', 'Partner', 'Agricultural advisor', JSON.stringify(['f1', 'f2']), 1, now);
-    insertUser.run('u-amit', 'amit@smartfarm.demo', defaultHash, 'Amit Jadhav', 'Technician', 'IoT field technician', JSON.stringify(['f1', 'f2', 'f3']), 1, now);
+    for (const [id, email, hash, name, role, desc, farms] of userInserts) {
+      await db.query(`
+        INSERT INTO users (id, email, password_hash, name, role, description, farm_ids, active, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [id, email, hash, name, role, desc, farms, true, now]);
+    }
   }
 
-  const farmCount = (db.prepare('SELECT COUNT(*) as count FROM farms').get() as { count: number }).count;
+  const farmCountRow = await db.queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM farms');
+  const farmCount = Number(farmCountRow?.count || 0);
+
   if (farmCount === 0) {
-    const insertFarm = db.prepare(`
-      INSERT INTO farms (id, name, location, owner_id, area_ha, soil_type, field_count, primary_crop, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const farmInserts = [
+      ['f1', 'Shivneri Farm', 'Narhe, Pune, Maharashtra', 'u-pushkar', 4.5, 'Black cotton soil', 3, 'Tomato', 'Healthy'],
+      ['f2', 'Sahyadri Sheti', 'Karad, Satara, Maharashtra', 'u-ramesh', 7.2, 'Red loamy soil', 4, 'Sugarcane', 'Needs attention'],
+      ['f3', 'Green Valley Plot', 'Baramati, Pune, Maharashtra', 'u-admin', 2.8, 'Alluvial soil', 2, 'Onion', 'Healthy'],
+    ];
 
-    insertFarm.run('f1', 'Shivneri Farm', 'Narhe, Pune, Maharashtra', 'u-pushkar', 4.5, 'Black cotton soil', 3, 'Tomato', 'Healthy', now);
-    insertFarm.run('f2', 'Sahyadri Sheti', 'Karad, Satara, Maharashtra', 'u-ramesh', 7.2, 'Red loamy soil', 4, 'Sugarcane', 'Needs attention', now);
-    insertFarm.run('f3', 'Green Valley Plot', 'Baramati, Pune, Maharashtra', 'u-admin', 2.8, 'Alluvial soil', 2, 'Onion', 'Healthy', now);
+    for (const [id, name, location, ownerId, area, soil, fields, crop, status] of farmInserts) {
+      await db.query(`
+        INSERT INTO farms (id, name, location, owner_id, area_ha, soil_type, field_count, primary_crop, status, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [id, name, location, ownerId, area, soil, fields, crop, status, now]);
+    }
   }
 
-  const deviceCount = (db.prepare('SELECT COUNT(*) as count FROM devices').get() as { count: number }).count;
+  const deviceCountRow = await db.queryOne<{ count: number | string }>('SELECT COUNT(*) as count FROM devices');
+  const deviceCount = Number(deviceCountRow?.count || 0);
+
   if (deviceCount === 0) {
     const { rawToken, tokenHash } = generateDeviceToken();
     devDeviceToken = rawToken;
 
-    const insertDevice = db.prepare(`
+    await db.query(`
       INSERT INTO devices (id, name, farm_id, hardware_type, token_hash, status, battery_pct, last_seen_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, ['ESP32-PN-001', 'Soil & Weather Node 01', 'f1', 'ESP32 + SHT40 + Modbus RS485 + RainGauge', tokenHash, 'Online', 94.0, now, now]);
 
-    insertDevice.run('ESP32-PN-001', 'Soil & Weather Node 01', 'f1', 'ESP32 + SHT40 + Modbus RS485 + RainGauge', tokenHash, 'Online', 94.0, now, now);
-    insertDevice.run('ESP32-ST-002', 'Field Sensor Node 02', 'f2', 'ESP32 + Modbus RS485', hashPassword('dummy'), 'Offline', 22.0, null, now);
+    await db.query(`
+      INSERT INTO devices (id, name, farm_id, hardware_type, token_hash, status, battery_pct, last_seen_at, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, ['ESP32-ST-002', 'Field Sensor Node 02', 'f2', 'ESP32 + Modbus RS485', hashPassword('dummy'), 'Offline', 22.0, null, now]);
   }
+}
+
+/**
+ * Initialize Database Singleton.
+ * Uses PostgreSQL if DATABASE_URL is set; falls back to SQLite for local development and tests.
+ */
+export async function initDatabase(customDbPath?: string): Promise<DatabaseClient> {
+  if (dbInstance) return dbInstance;
+
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+
+  if (databaseUrl) {
+    console.log('[Database] Connecting to PostgreSQL 17 database...');
+    const adapter = new PostgresDatabaseAdapter(databaseUrl);
+    await initializePostgresSchema(adapter);
+    await seedBaselineData(adapter);
+    dbInstance = adapter;
+    return adapter;
+  } else {
+    const adapter = new SqliteDatabaseAdapter(customDbPath);
+    await initializeSqliteSchema(adapter);
+    await seedBaselineData(adapter);
+    dbInstance = adapter;
+    return adapter;
+  }
+}
+
+export function getDb(): DatabaseClient {
+  if (!dbInstance) {
+    // If called before explicit initDatabase(), instantiate synchronously with SQLite fallback
+    const adapter = new SqliteDatabaseAdapter();
+    // Non-blocking schema initialization
+    initializeSqliteSchema(adapter).then(() => seedBaselineData(adapter)).catch(err => {
+      console.error('[Database] Failed to initialize default schema:', err);
+    });
+    dbInstance = adapter;
+    return adapter;
+  }
+  return dbInstance;
 }

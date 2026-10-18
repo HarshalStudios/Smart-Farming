@@ -27,10 +27,9 @@ async function runPhase3FirmwareTests() {
   const testDeviceId = 'ESP32-PN-001';
   const { rawToken, tokenHash } = generateDeviceToken();
 
-  db.prepare(`
-    INSERT OR REPLACE INTO devices (id, name, farm_id, hardware_type, token_hash, status, battery_pct, last_seen_at, created_at)
-    VALUES (?, 'Soil & Weather Node 01', 'f1', 'ESP32 + SHT40 + Modbus RS485 + RainGauge', ?, 'Offline', 100.0, NULL, ?)
-  `).run(testDeviceId, tokenHash, new Date().toISOString());
+  await db.query(`
+    UPDATE devices SET token_hash = $1, status = 'Offline', battery_pct = 100.0 WHERE id = $2
+  `, [tokenHash, testDeviceId]);
 
   // Admin session token for queries
   const adminToken = signSessionToken({
@@ -143,10 +142,13 @@ async function runPhase3FirmwareTests() {
     assert(ingestRes.status === 201 && ingestJson.status === 'success', 'ESP32 firmware successfully posts telemetry (201 Created)');
 
     // Verify device status updated to 'Online' with recent last_seen_at
-    const devRow = db.prepare('SELECT status, battery_pct, last_seen_at FROM devices WHERE id = ?').get(testDeviceId) as { status: string; battery_pct: number; last_seen_at: string };
-    assert(devRow.status === 'Online', 'Device status transitioned to Online in database');
-    assert(devRow.battery_pct === 94.0, 'Device battery updated from diagnostics');
-    assert(!!devRow.last_seen_at, 'Device last_seen_at recorded');
+    const devRow = await db.queryOne<{ status: string; battery_pct: number; last_seen_at: string }>(
+      'SELECT status, battery_pct, last_seen_at FROM devices WHERE id = $1',
+      [testDeviceId]
+    );
+    assert(devRow?.status === 'Online', 'Device status transitioned to Online in database');
+    assert(devRow?.battery_pct === 94.0, 'Device battery updated from diagnostics');
+    assert(!!devRow?.last_seen_at, 'Device last_seen_at recorded');
   } catch (err: unknown) {
     assert(false, 'Live ingestion suite', (err as Error).message);
   }
@@ -202,15 +204,15 @@ async function runPhase3FirmwareTests() {
     const failJson = await failIngestRes.json() as { readingId: number };
     assert(failIngestRes.status === 201, 'Failed Modbus reading safely accepted with valid: false');
 
-    // Query SQLite database to verify NULL values were stored, NOT 0.0
-    const readingRow = db.prepare(`
+    // Query database to verify NULL values were stored, NOT 0.0
+    const readingRow = await db.queryOne<{ soil_moisture_pct: number | null; soil_ph: number | null; modbus_valid: boolean | number }>(`
       SELECT soil_moisture_pct, soil_temperature_c, soil_ph, modbus_valid 
-      FROM telemetry_readings WHERE id = ?
-    `).get(failJson.readingId) as { soil_moisture_pct: number | null; soil_ph: number | null; modbus_valid: number };
+      FROM telemetry_readings WHERE id = $1
+    `, [failJson.readingId]);
 
-    assert(readingRow.modbus_valid === 0, 'modbus_valid stored as 0 in database');
-    assert(readingRow.soil_moisture_pct === null, 'CRITICAL: Failed moisture is stored as NULL, never 0.0');
-    assert(readingRow.soil_ph === null, 'CRITICAL: Failed pH is stored as NULL, never 0.0');
+    assert(!readingRow?.modbus_valid || readingRow?.modbus_valid === 0, 'modbus_valid stored as false/0 in database');
+    assert(readingRow?.soil_moisture_pct === null, 'CRITICAL: Failed moisture is stored as NULL, never 0.0');
+    assert(readingRow?.soil_ph === null, 'CRITICAL: Failed pH is stored as NULL, never 0.0');
   } catch (err: unknown) {
     assert(false, 'Null preservation suite', (err as Error).message);
   }
@@ -243,9 +245,12 @@ async function runPhase3FirmwareTests() {
     });
     const rainJson = await rainRes.json() as { readingId: number };
 
-    const rainRecord = db.prepare('SELECT rain_pulses, rain_accumulation_mm FROM telemetry_readings WHERE id = ?').get(rainJson.readingId) as { rain_pulses: number; rain_accumulation_mm: number };
-    assert(rainRecord.rain_pulses === 7, 'Rain pulse count recorded accurately (7 tips)');
-    assert(Math.abs(rainRecord.rain_accumulation_mm - expectedMm) < 0.0001, `Rain accumulation calibrated: 7 * 0.1498 = ${expectedMm} mm`);
+    const rainRecord = await db.queryOne<{ rain_pulses: number; rain_accumulation_mm: number }>(
+      'SELECT rain_pulses, rain_accumulation_mm FROM telemetry_readings WHERE id = $1',
+      [rainJson.readingId]
+    );
+    assert(rainRecord?.rain_pulses === 7, 'Rain pulse count recorded accurately (7 tips)');
+    assert(Math.abs((rainRecord?.rain_accumulation_mm || 0) - expectedMm) < 0.0001, `Rain accumulation calibrated: 7 * 0.1498 = ${expectedMm} mm`);
   } catch (err: unknown) {
     assert(false, 'Rain gauge suite', (err as Error).message);
   }

@@ -18,18 +18,19 @@
 #define WIFI_TIMEOUT_MS 15000 // 15 seconds connection timeout
 
 // ==========================================
-// 2. Backend API Endpoint
+// 2. Backend API Endpoint & Transport Security
 // ==========================================
-// Use HTTP for local development or HTTPS for production
-#define USE_HTTPS false // Set true for cloud deployment with TLS verification
+// Set USE_HTTPS to true for production cloud endpoints with TLS verification.
+// Set USE_HTTPS to false for local network HTTP testing on your LAN.
+#define USE_HTTPS false 
 
 // Hostname (without http:// or https://)
-// For local testing on Windows with ESP32 on same Wi-Fi, use your PC's LAN IP (e.g., "192.168.1.150")
-// For AI Studio / Cloud Run, use the cloud hostname
+// For local testing on your LAN, use your PC's IP (e.g., "192.168.1.100")
+// For production, use your domain (e.g. "smartfarm.example.com")
 #define API_HOST "192.168.1.100"
 #define API_PORT 3000
 
-// Ingestion endpoint path matching Phase 2 backend
+// Ingestion endpoint path matching backend contract
 #define API_INGEST_PATH "/api/v1/telemetry/ingest"
 
 // Device Credentials (obtain via Admin API: POST /api/devices)
@@ -59,9 +60,9 @@
 // ==========================================
 // 4. Scheduling & Timers
 // ==========================================
-#define TELEMETRY_UPLOAD_INTERVAL_MS 60000 // 60 seconds
-#define SENSOR_READ_INTERVAL_MS      5000  // 5 seconds
-#define OLED_PAGE_CYCLE_MS           3000  // 3 seconds per display page
+#define TELEMETRY_UPLOAD_INTERVAL_MS 60000 // Ingest every 60 seconds
+#define SENSOR_READ_INTERVAL_MS      5000  // Read sensors every 5 seconds
+#define OLED_PAGE_CYCLE_MS           3000  // Cycle OLED page every 3 seconds
 
 // ==========================================
 // 5. NTP Time Server
@@ -72,9 +73,9 @@
 #define DAYLIGHT_OFFSET_SEC 0
 
 // ==========================================
-// 6. Optional Root CA Certificate for HTTPS
+// 6. Root CA Certificate for Production HTTPS
 // ==========================================
-// ISRG Root X1 (Let's Encrypt / Google Trust Services)
+// Authentic ISRG Root X1 (Let's Encrypt / Google Trust Services / Cloud Run)
 #if USE_HTTPS
 const char ROOT_CA_CERT[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
@@ -86,20 +87,27 @@ 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
-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
+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
 -----END CERTIFICATE-----
 )EOF";
 #endif

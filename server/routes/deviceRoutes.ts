@@ -19,33 +19,44 @@ export function evaluateDeviceStatus(currentStatus: string, lastSeenAt: string |
 }
 
 // GET /api/devices - List devices (omits token hashes)
-router.get('/', requireUserAuth, (req: AuthenticatedRequest, res: Response) => {
-  const db = getDb();
-  let rawDevices: DbDevice[] = [];
+router.get('/', requireUserAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const db = getDb();
+    let rawDevices: DbDevice[] = [];
 
-  if (req.user!.role === 'Admin' || req.user!.role === 'Technician') {
-    rawDevices = db.prepare('SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices').all() as unknown as DbDevice[];
-  } else {
-    // For farmers and partners, only show devices assigned to their farms
-    const userFarms = req.user!.farmIds;
-    if (userFarms.length === 0) {
-      rawDevices = [];
+    if (req.user!.role === 'Admin' || req.user!.role === 'Technician') {
+      const result = await db.query<DbDevice>(
+        'SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices ORDER BY name ASC'
+      );
+      rawDevices = result.rows;
     } else {
-      const placeholders = userFarms.map(() => '?').join(',');
-      rawDevices = db.prepare(`SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices WHERE farm_id IN (${placeholders})`).all(...userFarms) as unknown as DbDevice[];
+      // For farmers and partners, only show devices assigned to their farms
+      const userFarms = req.user!.farmIds;
+      if (userFarms.length === 0) {
+        rawDevices = [];
+      } else {
+        const placeholders = userFarms.map((_, i) => `$${i + 1}`).join(', ');
+        const result = await db.query<DbDevice>(
+          `SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices WHERE farm_id IN (${placeholders}) ORDER BY name ASC`,
+          userFarms
+        );
+        rawDevices = result.rows;
+      }
     }
+
+    const devices = rawDevices.map(d => ({
+      ...d,
+      status: evaluateDeviceStatus(d.status, d.last_seen_at)
+    }));
+
+    res.json({ devices });
+  } catch (err: unknown) {
+    res.status(500).json({ error: 'Database Error', message: (err as Error).message });
   }
-
-  const devices = rawDevices.map(d => ({
-    ...d,
-    status: evaluateDeviceStatus(d.status, d.last_seen_at)
-  }));
-
-  res.json({ devices });
 });
 
 // POST /api/devices - Register new hardware device (Admin only)
-router.post('/', requireUserAuth, requireRole(['Admin']), (req: AuthenticatedRequest, res: Response) => {
+router.post('/', requireUserAuth, requireRole(['Admin']), async (req: AuthenticatedRequest, res: Response) => {
   const { id, name, farmId, hardwareType } = req.body || {};
 
   if (!id || !name || !farmId) {
@@ -53,21 +64,21 @@ router.post('/', requireUserAuth, requireRole(['Admin']), (req: AuthenticatedReq
     return;
   }
 
-  const db = getDb();
-  const existing = db.prepare('SELECT id FROM devices WHERE id = ?').get(id.trim());
-  if (existing) {
-    res.status(409).json({ error: 'Conflict', message: `Device with ID ${id} already exists` });
-    return;
-  }
-
-  const { rawToken, tokenHash } = generateDeviceToken();
-  const now = new Date().toISOString();
-
   try {
-    db.prepare(`
+    const db = getDb();
+    const existing = await db.queryOne<{ id: string }>('SELECT id FROM devices WHERE id = $1', [id.trim()]);
+    if (existing) {
+      res.status(409).json({ error: 'Conflict', message: `Device with ID ${id} already exists` });
+      return;
+    }
+
+    const { rawToken, tokenHash } = generateDeviceToken();
+    const now = new Date().toISOString();
+
+    await db.query(`
       INSERT INTO devices (id, name, farm_id, hardware_type, token_hash, status, battery_pct, last_seen_at, created_at)
-      VALUES (?, ?, ?, ?, ?, 'Offline', 100.0, NULL, ?)
-    `).run(id.trim(), name.trim(), farmId.trim(), hardwareType || 'ESP32 + MultiSensor', tokenHash, now);
+      VALUES ($1, $2, $3, $4, $5, 'Offline', 100.0, NULL, $6)
+    `, [id.trim(), name.trim(), farmId.trim(), hardwareType || 'ESP32 + MultiSensor', tokenHash, now]);
 
     // Return the raw token ONCE upon registration
     res.status(201).json({
@@ -86,24 +97,28 @@ router.post('/', requireUserAuth, requireRole(['Admin']), (req: AuthenticatedReq
 });
 
 // POST /api/devices/:id/rotate-token - Rotate device token (Admin or Technician)
-router.post('/:id/rotate-token', requireUserAuth, requireRole(['Admin', 'Technician']), (req: AuthenticatedRequest, res: Response) => {
+router.post('/:id/rotate-token', requireUserAuth, requireRole(['Admin', 'Technician']), async (req: AuthenticatedRequest, res: Response) => {
   const deviceId = String(req.params.id);
-  const db = getDb();
 
-  const device = db.prepare('SELECT * FROM devices WHERE id = ?').get(deviceId) as DbDevice | undefined;
-  if (!device) {
-    res.status(404).json({ error: 'Not Found', message: 'Device not found' });
-    return;
+  try {
+    const db = getDb();
+    const device = await db.queryOne<DbDevice>('SELECT * FROM devices WHERE id = $1', [deviceId]);
+    if (!device) {
+      res.status(404).json({ error: 'Not Found', message: 'Device not found' });
+      return;
+    }
+
+    const { rawToken, tokenHash } = generateDeviceToken();
+    await db.query('UPDATE devices SET token_hash = $1 WHERE id = $2', [tokenHash, deviceId]);
+
+    res.json({
+      message: 'Device token rotated successfully. Update firmware config with the new token.',
+      deviceId,
+      newDeviceToken: rawToken
+    });
+  } catch (err: unknown) {
+    res.status(500).json({ error: 'Database Error', message: (err as Error).message });
   }
-
-  const { rawToken, tokenHash } = generateDeviceToken();
-  db.prepare('UPDATE devices SET token_hash = ? WHERE id = ?').run(tokenHash, deviceId);
-
-  res.json({
-    message: 'Device token rotated successfully. Update firmware config with the new token.',
-    deviceId,
-    newDeviceToken: rawToken
-  });
 });
 
 export default router;

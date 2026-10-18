@@ -51,7 +51,7 @@ export function requireRole(allowedRoles: UserRole[]) {
   };
 }
 
-export function requireDeviceAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export async function requireDeviceAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
   // Device tokens can be sent via X-Device-Token header or Authorization: Bearer gfd_...
   const rawToken = (req.headers['x-device-token'] as string) ||
     (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7).trim() : '');
@@ -64,18 +64,22 @@ export function requireDeviceAuth(req: AuthenticatedRequest, res: Response, next
     return;
   }
 
-  const tokenHash = hashDeviceToken(rawToken);
-  const db = getDb();
-  const device = db.prepare('SELECT * FROM devices WHERE token_hash = ?').get(tokenHash) as DbDevice | undefined;
+  try {
+    const tokenHash = hashDeviceToken(rawToken);
+    const db = getDb();
+    const device = await db.queryOne<DbDevice>('SELECT * FROM devices WHERE token_hash = $1', [tokenHash]);
 
-  if (!device) {
-    res.status(401).json({
-      error: 'Device Authentication Failed',
-      message: 'Unrecognized or revoked device token.'
-    });
-    return;
+    if (!device) {
+      res.status(401).json({
+        error: 'Device Authentication Failed',
+        message: 'Unrecognized or revoked device token.'
+      });
+      return;
+    }
+
+    req.device = device;
+    next();
+  } catch (err: unknown) {
+    res.status(500).json({ error: 'Internal Server Error', message: (err as Error).message });
   }
-
-  req.device = device;
-  next();
 }

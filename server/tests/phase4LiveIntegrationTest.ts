@@ -101,7 +101,7 @@ async function runPhase4Tests() {
   try {
     const testDevId = 'ESP32-PN-001';
     const { rawToken, tokenHash } = generateDeviceToken();
-    db.prepare('UPDATE devices SET token_hash = ? WHERE id = ?').run(tokenHash, testDevId);
+    await db.query('UPDATE devices SET token_hash = $1 WHERE id = $2', [tokenHash, testDevId]);
 
     const nowIso = new Date().toISOString();
     const rawIngestPayload = {
@@ -167,9 +167,8 @@ async function runPhase4Tests() {
   console.log('\nTest Group 4: Sensor Failure Handling & Null Safety');
   try {
     const testDevId = 'ESP32-PN-001';
-    const devTokenRow = db.prepare('SELECT token_hash FROM devices WHERE id = ?').get(testDevId);
     const { rawToken, tokenHash } = generateDeviceToken();
-    db.prepare('UPDATE devices SET token_hash = ? WHERE id = ?').run(tokenHash, testDevId);
+    await db.query('UPDATE devices SET token_hash = $1 WHERE id = $2', [tokenHash, testDevId]);
 
     const failPayload = {
       version: '1.0',
@@ -204,12 +203,18 @@ async function runPhase4Tests() {
     const failJson = await failRes.json() as { readingId: number };
     assert(failRes.status === 201, 'Faulty sensor ingest accepted safely (201 Created)');
 
-    const failRecord = db.prepare('SELECT air_temperature_c, soil_moisture_pct, soil_ph, sht40_valid, modbus_valid FROM telemetry_readings WHERE id = ?').get(failJson.readingId) as any;
-    assert(failRecord.sht40_valid === 0, 'SHT40 validity recorded as 0');
-    assert(failRecord.modbus_valid === 0, 'Modbus validity recorded as 0');
-    assert(failRecord.air_temperature_c === null, 'Air temperature is NULL, not 0.0');
-    assert(failRecord.soil_moisture_pct === null, 'Soil moisture is NULL, not 0.0');
-    assert(failRecord.soil_ph === null, 'Soil pH is NULL, not 0.0');
+    const failRecord = await db.queryOne<{
+      air_temperature_c: number | null;
+      soil_moisture_pct: number | null;
+      soil_ph: number | null;
+      sht40_valid: boolean | number;
+      modbus_valid: boolean | number;
+    }>('SELECT air_temperature_c, soil_moisture_pct, soil_ph, sht40_valid, modbus_valid FROM telemetry_readings WHERE id = $1', [failJson.readingId]);
+    assert(!failRecord?.sht40_valid || failRecord?.sht40_valid === 0, 'SHT40 validity recorded as false/0');
+    assert(!failRecord?.modbus_valid || failRecord?.modbus_valid === 0, 'Modbus validity recorded as false/0');
+    assert(failRecord?.air_temperature_c === null, 'Air temperature is NULL, not 0.0');
+    assert(failRecord?.soil_moisture_pct === null, 'Soil moisture is NULL, not 0.0');
+    assert(failRecord?.soil_ph === null, 'Soil pH is NULL, not 0.0');
   } catch (err: unknown) {
     assert(false, 'Sensor failure test suite error', (err as Error).message);
   }
