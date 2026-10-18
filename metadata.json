@@ -1,0 +1,6 @@
+{
+  "name": "GreenField — Smart Precision Farming",
+  "description": "Smart IoT-based precision farming demo dashboard for monitoring soil moisture, temperature, humidity, pH, crops, and devices.",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

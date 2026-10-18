@@ -1,0 +1,107 @@
+/**
+ * Smart Precision Farming — ESP32 Node Configuration Template
+ * 
+ * Instructions:
+ * 1. Copy this file to "config.h" in the same directory.
+ * 2. Update with your Wi-Fi credentials, backend URL, and device token.
+ * 3. Never commit "config.h" with real credentials to Git (it is ignored in .gitignore).
+ */
+
+#ifndef SMARTFARM_CONFIG_H
+#define SMARTFARM_CONFIG_H
+
+// ==========================================
+// 1. Wi-Fi Configuration
+// ==========================================
+#define WIFI_SSID       "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
+#define WIFI_TIMEOUT_MS 15000 // 15 seconds connection timeout
+
+// ==========================================
+// 2. Backend API Endpoint
+// ==========================================
+// Use HTTP for local development or HTTPS for production
+#define USE_HTTPS false // Set true for cloud deployment with TLS verification
+
+// Hostname (without http:// or https://)
+// For local testing on Windows with ESP32 on same Wi-Fi, use your PC's LAN IP (e.g., "192.168.1.150")
+// For AI Studio / Cloud Run, use the cloud hostname
+#define API_HOST "192.168.1.100"
+#define API_PORT 3000
+
+// Ingestion endpoint path matching Phase 2 backend
+#define API_INGEST_PATH "/api/v1/telemetry/ingest"
+
+// Device Credentials (obtain via Admin API: POST /api/devices)
+#define DEVICE_ID    "ESP32-PN-001"
+#define DEVICE_TOKEN "gfd_paste_your_revocable_device_token_here"
+
+// ==========================================
+// 3. Hardware Pin Mapping
+// ==========================================
+// I2C Pins (Shared by SHT40 and SH1106 OLED)
+#define PIN_I2C_SDA 21
+#define PIN_I2C_SCL 22
+#define OLED_I2C_ADDRESS 0x3C
+
+// RS485 / Modbus (MAX485 transceiver to 7-in-1 soil sensor)
+#define PIN_RS485_RX 16
+#define PIN_RS485_TX 17
+#define PIN_RS485_DE_RE 4 // HIGH = Transmit, LOW = Receive
+#define MODBUS_SLAVE_ID 1
+#define MODBUS_BAUDRATE 9600
+
+// Hall-Effect Tipping Bucket Rain Gauge
+#define PIN_RAIN_GAUGE 25
+#define RAIN_MM_PER_PULSE 0.1498f // Standard tipping bucket resolution: 0.1498 mm/tip
+#define RAIN_DEBOUNCE_MS 15       // 15ms interrupt debounce
+
+// ==========================================
+// 4. Scheduling & Timers
+// ==========================================
+#define TELEMETRY_UPLOAD_INTERVAL_MS 60000 // 60 seconds
+#define SENSOR_READ_INTERVAL_MS      5000  // 5 seconds
+#define OLED_PAGE_CYCLE_MS           3000  // 3 seconds per display page
+
+// ==========================================
+// 5. NTP Time Server
+// ==========================================
+#define NTP_SERVER_1 "pool.ntp.org"
+#define NTP_SERVER_2 "time.nist.gov"
+#define TIMEZONE_OFFSET_SEC 19800 // IST (UTC +5:30) = 19800 seconds
+#define DAYLIGHT_OFFSET_SEC 0
+
+// ==========================================
+// 6. Optional Root CA Certificate for HTTPS
+// ==========================================
+// ISRG Root X1 (Let's Encrypt / Google Trust Services)
+#if USE_HTTPS
+const char ROOT_CA_CERT[] PROGMEM = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8S5JlCdR53VCwbQuWhYBZyab46354vcDLg0301gTxQTYSeyxFy562bUwg
+Am72H2S/gdzuU0dB8950pxJ5NVDPIaoOJCHCdmVex9PHSQTWSEafQfGyp9NcIlJW
+cBEub/1VDpdTW5750L07Mt5tLCEjV97/Ws1PrsdagPdXV14eAm50GCpd2LPyerWm
+VaWOjELnVNaudSXV4Y9FMAOwx8y26ItBXtR+51R5YVilCGLSX493IBvcNiUwcqu0
+ZmTaFVAm+kVSkoxflWB479JLRmbnDOHLh2WkJ9OZyrq4iqysHgHMUbobTsubPt15
+sdpN44uQTq0Yn+85K31kWUvVCVOwm2hrO834Nus48j2Pt7jS4h79ZqYGYMbrUq9y
+6QrG23YNznDX0TQhe564h2pc2JfudeFMQwvEce6TMSpNq3FFl5A209qncvFAmw9n
+751WhUc4YygJy5ghOGNiUjpgOiTOMpn50ffEffZbgGjutn5S1b4FVcrbNpVxHg7e
+DQ8WB58mbNaVhJtx//VDTrZSAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgBlfgBp2l2ehcjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyhurdtUSnn8xRgdf70EQioNgtssNY2MMQg533R
+SieET29mg62mRDuCMD38bMETIb1NnBUt48vKcdfxmUMUGfryDXgu8WVKVIW645U7
+F/ve4PxxJxNMVDqE3pbST6Lx44ETgu8W//84oTtUnkknke/vGymNYgYS8L5N+ZCv
+Ez+1C4Z160awFgiZnKuvG90BfdS9WB479JLRmbnDOHLh2WkJ9OZyrq4iqysHgHM
+-----END CERTIFICATE-----
+)EOF";
+#endif
+
+#endif // SMARTFARM_CONFIG_H

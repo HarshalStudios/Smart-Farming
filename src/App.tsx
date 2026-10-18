@@ -119,7 +119,11 @@ export default function App() {
   const changePage = (p: Page) => { setPage(p); setMobileNav(false); setQuery('') }
   const patchStore = (patch: Partial<Store>) => setStore(prev => ({ ...prev, ...patch }))
   const upsert = <T extends {id:string}>(key: 'farms'|'crops'|'devices'|'users', item: T) => {
-    setStore(prev => ({ ...prev, [key]: (prev[key] as T[]).some(x => x.id === item.id) ? (prev[key] as T[]).map(x => x.id === item.id ? item : x) : [...prev[key] as T[], item] }) as Store)
+    setStore(prev => {
+      const list = prev[key] as unknown as T[]
+      const updated = list.some(x => x.id === item.id) ? list.map(x => x.id === item.id ? item : x) : [...list, item]
+      return { ...prev, [key]: updated } as Store
+    })
     setModal(null); setEditId(null); setForm({}); notify('Changes saved successfully')
   }
   const openForm = (kind: 'farm'|'crop'|'device'|'user', id?: string) => {
@@ -129,7 +133,7 @@ export default function App() {
     setModal(kind)
   }
   const removeRecord = (key: 'farms'|'crops'|'devices'|'users', id: string) => {
-    setStore(prev => ({ ...prev, [key]: prev[key].filter((x: {id:string}) => x.id !== id) }) as Store)
+    setStore(prev => ({ ...prev, [key]: (prev[key] as unknown as {id:string}[]).filter((x: {id:string}) => x.id !== id) }) as Store)
     notify('Record deleted')
   }
   const logout = () => { setUserId(null); setPage('Dashboard'); setModal(null); notify('You have logged out') }
