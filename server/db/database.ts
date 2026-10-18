@@ -83,9 +83,18 @@ export function getDevDeviceToken(): string | null {
 }
 
 /**
+ * Safely mask database credentials for logging and diagnostics.
+ * Replaces any password in the format user:password@ with user:***@.
+ */
+export function maskConnectionString(rawUrl?: string | null): string {
+  if (!rawUrl) return '';
+  return rawUrl.replace(/:([^:@/]+)@/g, ':***@');
+}
+
+/**
  * Clean and normalize a database URL.
- * Strips surrounding quotes (often introduced when pasting into env dashboards or .env files),
- * trailing semicolons, and ensures standard scheme prefix.
+ * Strips surrounding quotes, trailing semicolons, handles duplicate or malformed scheme prefixes,
+ * and ensures standard postgresql:// prefix without altering user credentials.
  */
 export function sanitizeDatabaseUrl(rawUrl: string): string {
   if (!rawUrl) return '';
@@ -105,7 +114,20 @@ export function sanitizeDatabaseUrl(rawUrl: string): string {
     clean = clean.slice(0, -1).trim();
   }
 
-  // If protocol scheme is missing, prepend postgresql://
+  // Strip duplicate scheme prefix like postgresql://postgresql// or postgresql://postgresql/
+  // Only strips if followed by / (never matches if followed by user:pass)
+  clean = clean.replace(/^postgres(ql)?:\/\/postgres(ql)?\/+/i, 'postgresql://');
+
+  // Fix missing colon in scheme: postgresql// or postgres//
+  clean = clean.replace(/^postgres(ql)?\/\//i, 'postgresql://');
+
+  // Fix single slash after colon in scheme: postgresql:/ or postgres:/
+  clean = clean.replace(/^postgres(ql)?:\/(?!\/)/i, 'postgresql://');
+
+  // Fix missing slashes after postgresql scheme: postgresql:user:pass...
+  clean = clean.replace(/^postgresql:(?!\/)/i, 'postgresql://');
+
+  // If protocol scheme is missing completely, prepend postgresql://
   if (!/^postgres(ql)?:\/\//i.test(clean)) {
     clean = `postgresql://${clean}`;
   }
@@ -127,11 +149,20 @@ class PostgresDatabaseAdapter implements DatabaseClient {
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(connectionString);
+
+      // Defensively recover if malformed URL parsing made the scheme name become the hostname
+      if (parsedUrl.hostname === 'postgresql' || parsedUrl.hostname === 'postgres') {
+        const nested = parsedUrl.pathname.replace(/^\/+/, '');
+        console.log(`[Database] Recovering from malformed scheme hostname: re-parsing nested target`);
+        parsedUrl = new URL(sanitizeDatabaseUrl(nested));
+      }
+
       if (parsedUrl.hostname === 'base' || !parsedUrl.hostname) {
         throw new Error(
           `Invalid PostgreSQL hostname resolved: "${parsedUrl.hostname}". Please ensure DATABASE_URL is formatted as postgresql://user:pass@host:port/dbname`
         );
       }
+
       console.log(`[Database] Initializing connection to PostgreSQL host: ${parsedUrl.hostname}, database: ${parsedUrl.pathname.replace(/^\//, '')}`);
     } catch (e: any) {
       if (e.message && e.message.includes('Invalid PostgreSQL hostname')) {
@@ -202,14 +233,32 @@ class SqliteDatabaseAdapter implements DatabaseClient {
   constructor(dbFilePath?: string) {
     const targetPath = dbFilePath || process.env.DATABASE_PATH || './data/greenfield.db';
 
-    if (targetPath !== ':memory:') {
+    if (targetPath === ':memory:') {
+      this.db = new DatabaseSync(':memory:');
+    } else {
       const dir = path.dirname(path.resolve(targetPath));
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      let useMemory = false;
+      try {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+      } catch (err: any) {
+        console.warn(`[Database] Unable to create local directory "${dir}" (${err.message}), using in-memory SQLite storage`);
+        useMemory = true;
+      }
+
+      if (useMemory) {
+        this.db = new DatabaseSync(':memory:');
+      } else {
+        try {
+          this.db = new DatabaseSync(targetPath);
+        } catch (err: any) {
+          console.warn(`[Database] Unable to open SQLite file "${targetPath}" (${err.message}), using in-memory SQLite storage`);
+          this.db = new DatabaseSync(':memory:');
+        }
       }
     }
 
-    this.db = new DatabaseSync(targetPath);
     this.db.exec('PRAGMA foreign_keys = ON;');
   }
 
@@ -499,18 +548,18 @@ export async function initDatabase(customDbPath?: string): Promise<DatabaseClien
   const databaseUrl = rawUrl ? sanitizeDatabaseUrl(rawUrl) : undefined;
 
   if (databaseUrl) {
+    console.log('[Database] DATABASE_URL detected for production environment');
+    console.log(`[Database] Target: ${maskConnectionString(databaseUrl)}`);
     console.log('[Database] Connecting to PostgreSQL 17 database...');
-    try {
-      const adapter = new PostgresDatabaseAdapter(databaseUrl);
-      await initializePostgresSchema(adapter);
-      await seedBaselineData(adapter);
-      dbInstance = adapter;
-      return adapter;
-    } catch (err: any) {
-      console.warn('[Database] Failed to connect to PostgreSQL, falling back to SQLite adapter:', err?.message || err);
-    }
+    const adapter = new PostgresDatabaseAdapter(databaseUrl);
+    await initializePostgresSchema(adapter);
+    await seedBaselineData(adapter);
+    dbInstance = adapter;
+    return adapter;
   }
 
+  // Local development / testing mode with SQLite
+  console.log('[Database] No DATABASE_URL configured; initializing SQLite for local development');
   const adapter = new SqliteDatabaseAdapter(customDbPath);
   await initializeSqliteSchema(adapter);
   await seedBaselineData(adapter);
@@ -520,11 +569,23 @@ export async function initDatabase(customDbPath?: string): Promise<DatabaseClien
 
 export function getDb(): DatabaseClient {
   if (!dbInstance) {
-    // If called before explicit initDatabase(), instantiate synchronously with SQLite fallback
+    const rawUrl = process.env.DATABASE_URL?.trim();
+    if (rawUrl) {
+      const databaseUrl = sanitizeDatabaseUrl(rawUrl);
+      console.log('[Database] getDb() called before initDatabase(); initializing PostgreSQL singleton');
+      const adapter = new PostgresDatabaseAdapter(databaseUrl);
+      // Non-blocking schema initialization if accessed before explicit initDatabase()
+      initializePostgresSchema(adapter).then(() => seedBaselineData(adapter)).catch(err => {
+        console.error('[Database] Failed to initialize default PostgreSQL schema:', err.message);
+      });
+      dbInstance = adapter;
+      return adapter;
+    }
+
+    // Local development SQLite fallback only when DATABASE_URL is NOT configured
     const adapter = new SqliteDatabaseAdapter();
-    // Non-blocking schema initialization
     initializeSqliteSchema(adapter).then(() => seedBaselineData(adapter)).catch(err => {
-      console.error('[Database] Failed to initialize default schema:', err);
+      console.error('[Database] Failed to initialize default SQLite schema:', err.message);
     });
     dbInstance = adapter;
     return adapter;

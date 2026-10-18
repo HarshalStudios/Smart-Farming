@@ -1,4 +1,4 @@
-import { getDb, initDatabase, sanitizeDatabaseUrl } from '../db/database';
+import { getDb, initDatabase, sanitizeDatabaseUrl, maskConnectionString } from '../db/database';
 import { signSessionToken, generateDeviceToken } from '../auth/security';
 
 async function runPostgresCompatibilityTests() {
@@ -179,7 +179,7 @@ async function runPostgresCompatibilityTests() {
     assert(false, 'Time series error', (err as Error).message);
   }
 
-  // Test Group 6: Hostless DATABASE_URL Parsing & ENOTFOUND base Prevention
+  // Test Group 6: Hostless DATABASE_URL Parsing & ENOTFOUND base / postgresql Prevention
   console.log('\nTest Group 6: Hostless DATABASE_URL Parsing & Hostname Integrity');
   try {
     const rawQuotedUrl = '"postgresql://smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm"';
@@ -188,17 +188,34 @@ async function runPostgresCompatibilityTests() {
     const rawWithoutScheme = 'smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm';
     const rawStandard = 'postgresql://smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm';
 
+    // Regression test cases for ENOTFOUND postgresql / base
+    const rawDuplicateScheme1 = 'postgresql://postgresql//postgres:secret_pass123@smartfarm-db.db.hostless.cloud:5432/smartfarm-db';
+    const rawDuplicateScheme2 = 'postgresql://postgresql/postgres:secret_pass123@smartfarm-db.db.hostless.cloud:5432/smartfarm-db';
+    const rawMissingColon = 'postgresql//postgres:secret_pass123@smartfarm-db.db.hostless.cloud:5432/smartfarm-db';
+    const rawSingleSlash = 'postgresql:/postgres:secret_pass123@smartfarm-db.db.hostless.cloud:5432/smartfarm-db';
+    const rawPostgresUserNoScheme = 'postgres:secret_pass123@smartfarm-db.db.hostless.cloud:5432/smartfarm-db';
+
     const cleanQuoted = sanitizeDatabaseUrl(rawQuotedUrl);
     const cleanSingle = sanitizeDatabaseUrl(rawSingleQuoted);
     const cleanSemicolon = sanitizeDatabaseUrl(rawWithSemicolon);
     const cleanNoScheme = sanitizeDatabaseUrl(rawWithoutScheme);
     const cleanStandard = sanitizeDatabaseUrl(rawStandard);
+    const cleanDup1 = sanitizeDatabaseUrl(rawDuplicateScheme1);
+    const cleanDup2 = sanitizeDatabaseUrl(rawDuplicateScheme2);
+    const cleanMissingColon = sanitizeDatabaseUrl(rawMissingColon);
+    const cleanSingleSlash = sanitizeDatabaseUrl(rawSingleSlash);
+    const cleanPostgresUser = sanitizeDatabaseUrl(rawPostgresUserNoScheme);
 
     const parsedQuoted = new URL(cleanQuoted);
     const parsedSingle = new URL(cleanSingle);
     const parsedSemicolon = new URL(cleanSemicolon);
     const parsedNoScheme = new URL(cleanNoScheme);
     const parsedStandard = new URL(cleanStandard);
+    const parsedDup1 = new URL(cleanDup1);
+    const parsedDup2 = new URL(cleanDup2);
+    const parsedMissingColon = new URL(cleanMissingColon);
+    const parsedSingleSlash = new URL(cleanSingleSlash);
+    const parsedPostgresUser = new URL(cleanPostgresUser);
 
     assert(parsedQuoted.hostname === 'smartfarm-db.db.hostless.cloud', 'Double-quoted DATABASE_URL strips quotes and avoids hostname "base"');
     assert(parsedSingle.hostname === 'smartfarm-db.db.hostless.cloud', 'Single-quoted DATABASE_URL strips quotes and avoids hostname "base"');
@@ -206,6 +223,23 @@ async function runPostgresCompatibilityTests() {
     assert(parsedNoScheme.hostname === 'smartfarm-db.db.hostless.cloud', 'DATABASE_URL missing protocol automatically prepends postgresql://');
     assert(parsedStandard.hostname === 'smartfarm-db.db.hostless.cloud', 'Standard unquoted DATABASE_URL preserved intact');
     assert(parsedQuoted.hostname !== 'base' && parsedSingle.hostname !== 'base', 'Hostname "base" fallback is strictly prevented across all input variations');
+
+    // ENOTFOUND postgresql regression assertions
+    assert(parsedDup1.hostname === 'smartfarm-db.db.hostless.cloud', 'Duplicate scheme (postgresql://postgresql//) strips duplicate and resolves actual host');
+    assert(parsedDup1.hostname !== 'postgresql', 'Duplicate scheme strictly avoids resolving hostname "postgresql"');
+    assert(parsedDup1.username === 'postgres', 'User "postgres" preserved despite duplicate scheme prefix');
+    assert(parsedDup1.pathname === '/smartfarm-db', 'Database name "smartfarm-db" preserved without leading slashes or user artifact');
+
+    assert(parsedDup2.hostname === 'smartfarm-db.db.hostless.cloud', 'Duplicate scheme (postgresql://postgresql/) resolves actual host');
+    assert(parsedMissingColon.hostname === 'smartfarm-db.db.hostless.cloud', 'Missing colon scheme (postgresql//) normalized to valid scheme');
+    assert(parsedSingleSlash.hostname === 'smartfarm-db.db.hostless.cloud', 'Single slash scheme (postgresql:/) normalized to valid scheme');
+    assert(parsedPostgresUser.hostname === 'smartfarm-db.db.hostless.cloud', 'Schemeless URL with user postgres preserves username and host');
+    assert(parsedPostgresUser.username === 'postgres', 'Username postgres preserved in schemeless URL');
+
+    // Safe masking assertions
+    const masked = maskConnectionString(rawStandard);
+    assert(!masked.includes('secret_pw'), 'maskConnectionString masks plaintext passwords');
+    assert(masked.includes(':***@'), 'maskConnectionString contains safe :***@ token');
   } catch (err: unknown) {
     assert(false, 'DATABASE_URL sanitization error', (err as Error).message);
   }
