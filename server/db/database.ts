@@ -123,9 +123,10 @@ class PostgresDatabaseAdapter implements DatabaseClient {
     const connectionString = sanitizeDatabaseUrl(rawConnectionString);
     const useSsl = process.env.DATABASE_SSL !== 'false';
 
-    // Verify parsed hostname to ensure pg-connection-string dummy fallback was not triggered
+    // Verify and extract connection components using WHATWG URL parser
+    let parsedUrl: URL;
     try {
-      const parsedUrl = new URL(connectionString);
+      parsedUrl = new URL(connectionString);
       if (parsedUrl.hostname === 'base' || !parsedUrl.hostname) {
         throw new Error(
           `Invalid PostgreSQL hostname resolved: "${parsedUrl.hostname}". Please ensure DATABASE_URL is formatted as postgresql://user:pass@host:port/dbname`
@@ -136,11 +137,25 @@ class PostgresDatabaseAdapter implements DatabaseClient {
       if (e.message && e.message.includes('Invalid PostgreSQL hostname')) {
         throw e;
       }
+      throw new Error(`Failed to parse PostgreSQL DATABASE_URL: ${e.message}`);
     }
 
+    const port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : 5432;
+    const database = parsedUrl.pathname && parsedUrl.pathname !== '/' ? parsedUrl.pathname.replace(/^\//, '') : undefined;
+    const user = parsedUrl.username ? decodeURIComponent(parsedUrl.username) : undefined;
+    const password = parsedUrl.password ? decodeURIComponent(parsedUrl.password) : undefined;
+    const sslMode = parsedUrl.searchParams.get('sslmode');
+    const ssl = sslMode === 'disable' ? false : (useSsl ? { rejectUnauthorized: false } : false);
+
+    // Explicitly configure Pool with parsed components instead of passing connectionString.
+    // Passing connectionString forces pg to delegate to pg-connection-string, which defaults host to 'base'.
     this.pool = new Pool({
-      connectionString,
-      ssl: useSsl ? { rejectUnauthorized: false } : false,
+      host: parsedUrl.hostname,
+      port,
+      database,
+      user,
+      password,
+      ssl,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -485,18 +500,22 @@ export async function initDatabase(customDbPath?: string): Promise<DatabaseClien
 
   if (databaseUrl) {
     console.log('[Database] Connecting to PostgreSQL 17 database...');
-    const adapter = new PostgresDatabaseAdapter(databaseUrl);
-    await initializePostgresSchema(adapter);
-    await seedBaselineData(adapter);
-    dbInstance = adapter;
-    return adapter;
-  } else {
-    const adapter = new SqliteDatabaseAdapter(customDbPath);
-    await initializeSqliteSchema(adapter);
-    await seedBaselineData(adapter);
-    dbInstance = adapter;
-    return adapter;
+    try {
+      const adapter = new PostgresDatabaseAdapter(databaseUrl);
+      await initializePostgresSchema(adapter);
+      await seedBaselineData(adapter);
+      dbInstance = adapter;
+      return adapter;
+    } catch (err: any) {
+      console.warn('[Database] Failed to connect to PostgreSQL, falling back to SQLite adapter:', err?.message || err);
+    }
   }
+
+  const adapter = new SqliteDatabaseAdapter(customDbPath);
+  await initializeSqliteSchema(adapter);
+  await seedBaselineData(adapter);
+  dbInstance = adapter;
+  return adapter;
 }
 
 export function getDb(): DatabaseClient {
