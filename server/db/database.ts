@@ -83,13 +83,61 @@ export function getDevDeviceToken(): string | null {
 }
 
 /**
+ * Clean and normalize a database URL.
+ * Strips surrounding quotes (often introduced when pasting into env dashboards or .env files),
+ * trailing semicolons, and ensures standard scheme prefix.
+ */
+export function sanitizeDatabaseUrl(rawUrl: string): string {
+  if (!rawUrl) return '';
+  let clean = rawUrl.trim();
+
+  // Strip surrounding quotes or backticks (e.g., "postgresql://...", 'postgresql://...', `postgresql://...`)
+  while (
+    (clean.startsWith('"') && clean.endsWith('"')) ||
+    (clean.startsWith("'") && clean.endsWith("'")) ||
+    (clean.startsWith('`') && clean.endsWith('`'))
+  ) {
+    clean = clean.slice(1, -1).trim();
+  }
+
+  // Strip trailing semicolon if present
+  if (clean.endsWith(';')) {
+    clean = clean.slice(0, -1).trim();
+  }
+
+  // If protocol scheme is missing, prepend postgresql://
+  if (!/^postgres(ql)?:\/\//i.test(clean)) {
+    clean = `postgresql://${clean}`;
+  }
+
+  return clean;
+}
+
+/**
  * PostgreSQL Database Adapter backed by pg.Pool
  */
 class PostgresDatabaseAdapter implements DatabaseClient {
   private pool: pg.Pool;
 
-  constructor(connectionString: string) {
+  constructor(rawConnectionString: string) {
+    const connectionString = sanitizeDatabaseUrl(rawConnectionString);
     const useSsl = process.env.DATABASE_SSL !== 'false';
+
+    // Verify parsed hostname to ensure pg-connection-string dummy fallback was not triggered
+    try {
+      const parsedUrl = new URL(connectionString);
+      if (parsedUrl.hostname === 'base' || !parsedUrl.hostname) {
+        throw new Error(
+          `Invalid PostgreSQL hostname resolved: "${parsedUrl.hostname}". Please ensure DATABASE_URL is formatted as postgresql://user:pass@host:port/dbname`
+        );
+      }
+      console.log(`[Database] Initializing connection to PostgreSQL host: ${parsedUrl.hostname}, database: ${parsedUrl.pathname.replace(/^\//, '')}`);
+    } catch (e: any) {
+      if (e.message && e.message.includes('Invalid PostgreSQL hostname')) {
+        throw e;
+      }
+    }
+
     this.pool = new Pool({
       connectionString,
       ssl: useSsl ? { rejectUnauthorized: false } : false,
@@ -432,7 +480,8 @@ async function seedBaselineData(db: DatabaseClient): Promise<void> {
 export async function initDatabase(customDbPath?: string): Promise<DatabaseClient> {
   if (dbInstance) return dbInstance;
 
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  const databaseUrl = rawUrl ? sanitizeDatabaseUrl(rawUrl) : undefined;
 
   if (databaseUrl) {
     console.log('[Database] Connecting to PostgreSQL 17 database...');

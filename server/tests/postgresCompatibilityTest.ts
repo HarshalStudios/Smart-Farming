@@ -1,4 +1,4 @@
-import { getDb, initDatabase } from '../db/database';
+import { getDb, initDatabase, sanitizeDatabaseUrl } from '../db/database';
 import { signSessionToken, generateDeviceToken } from '../auth/security';
 
 async function runPostgresCompatibilityTests() {
@@ -177,6 +177,37 @@ async function runPostgresCompatibilityTests() {
     assert(historyRes.rows.length <= 10, 'History query respects LIMIT parameter');
   } catch (err: unknown) {
     assert(false, 'Time series error', (err as Error).message);
+  }
+
+  // Test Group 6: Hostless DATABASE_URL Parsing & ENOTFOUND base Prevention
+  console.log('\nTest Group 6: Hostless DATABASE_URL Parsing & Hostname Integrity');
+  try {
+    const rawQuotedUrl = '"postgresql://smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm"';
+    const rawSingleQuoted = "'postgresql://smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm'";
+    const rawWithSemicolon = 'postgresql://smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm;';
+    const rawWithoutScheme = 'smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm';
+    const rawStandard = 'postgresql://smartfarm_user:secret_pw@smartfarm-db.db.hostless.cloud:5432/smartfarm';
+
+    const cleanQuoted = sanitizeDatabaseUrl(rawQuotedUrl);
+    const cleanSingle = sanitizeDatabaseUrl(rawSingleQuoted);
+    const cleanSemicolon = sanitizeDatabaseUrl(rawWithSemicolon);
+    const cleanNoScheme = sanitizeDatabaseUrl(rawWithoutScheme);
+    const cleanStandard = sanitizeDatabaseUrl(rawStandard);
+
+    const parsedQuoted = new URL(cleanQuoted);
+    const parsedSingle = new URL(cleanSingle);
+    const parsedSemicolon = new URL(cleanSemicolon);
+    const parsedNoScheme = new URL(cleanNoScheme);
+    const parsedStandard = new URL(cleanStandard);
+
+    assert(parsedQuoted.hostname === 'smartfarm-db.db.hostless.cloud', 'Double-quoted DATABASE_URL strips quotes and avoids hostname "base"');
+    assert(parsedSingle.hostname === 'smartfarm-db.db.hostless.cloud', 'Single-quoted DATABASE_URL strips quotes and avoids hostname "base"');
+    assert(parsedSemicolon.hostname === 'smartfarm-db.db.hostless.cloud', 'Trailing semicolon DATABASE_URL stripped safely');
+    assert(parsedNoScheme.hostname === 'smartfarm-db.db.hostless.cloud', 'DATABASE_URL missing protocol automatically prepends postgresql://');
+    assert(parsedStandard.hostname === 'smartfarm-db.db.hostless.cloud', 'Standard unquoted DATABASE_URL preserved intact');
+    assert(parsedQuoted.hostname !== 'base' && parsedSingle.hostname !== 'base', 'Hostname "base" fallback is strictly prevented across all input variations');
+  } catch (err: unknown) {
+    assert(false, 'DATABASE_URL sanitization error', (err as Error).message);
   }
 
   console.log('\n================================================================');
