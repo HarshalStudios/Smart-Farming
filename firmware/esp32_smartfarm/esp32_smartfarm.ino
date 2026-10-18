@@ -7,9 +7,9 @@
  *  - ESP32-WROOM-32 / ESP32-DevKitC
  *  - Sensirion SHT40 (High-accuracy I2C Air Temperature & Humidity)
  *  - 1.3" I2C SH1106 128x64 OLED Display (I2C address 0x3C)
- *  - MAX485 TTL-to-RS485 transceiver module
+ *  - MAX485 TTL-to-RS485 transceiver module (DE/RE on GPIO 4, RX on GPIO 16, TX on GPIO 17, 4800 baud)
  *  - Industrial 7-in-1 Soil Sensor (Soil Moisture, Temp, EC, pH, N, P, K) via Modbus RTU
- *  - High-precision Tipping-Bucket Rain Gauge (0.1498 mm/pulse) on GPIO 25
+ *  - High-precision Tipping-Bucket Rain Gauge (0.1498 mm/pulse) on GPIO 13 (100ms debounce)
  * 
  * Ingestion Protocol:
  *  - HTTP / HTTPS POST to /api/v1/telemetry/ingest
@@ -123,7 +123,7 @@ void postTransmission() {
 // ==============================================================================
 void IRAM_ATTR isrRainPulse() {
   unsigned long currentTime = millis();
-  // 15ms hardware debounce to filter contact chatter
+  // Configured hardware debounce (e.g. 100ms) to filter contact chatter
   if (currentTime - lastRainInterruptTime > RAIN_DEBOUNCE_MS) {
     portENTER_CRITICAL_ISR(&rainMux);
     isrRainPulses++;
@@ -552,12 +552,15 @@ void uploadTelemetry() {
 
   // 4. HTTP / HTTPS Transmission
   HTTPClient http;
-  String url = String(USE_HTTPS ? "https://" : "http://") + API_HOST + ":" + String(API_PORT) + API_INGEST_PATH;
+  String portSuffix = (API_PORT == 80 || API_PORT == 443) ? "" : (":" + String(API_PORT));
+  String url = String(USE_HTTPS ? "https://" : "http://") + API_HOST + portSuffix + API_INGEST_PATH;
+
+  Serial.printf("[UPLOAD] Target endpoint: %s\n", url.c_str());
 
   if (USE_HTTPS) {
 #if USE_HTTPS
     WiFiClientSecure secureClient;
-    secureClient.setCACert(ROOT_CA_CERT);
+    secureClient.setCACert(ROOT_CA_CERT); // Full TLS Root CA verification
     http.begin(secureClient, url);
 #endif
   } else {
@@ -567,19 +570,40 @@ void uploadTelemetry() {
 
   http.addHeader("Content-Type", "application/json");
   http.addHeader("X-Device-Token", DEVICE_TOKEN);
-  http.setTimeout(10000); // 10 second timeout
+  http.setTimeout(8000); // 8-second network timeout
 
   int httpCode = http.POST((uint8_t*)jsonBuffer, strlen(jsonBuffer));
   lastHttpStatus = httpCode;
 
-  if (httpCode > 0) {
+  if (httpCode >= 200 && httpCode < 300) {
     String response = http.getString();
-    Serial.printf("[UPLOAD] Success! HTTP Status: %d\n[UPLOAD] Server Response: %s\n", httpCode, response.c_str());
+    Serial.printf("[UPLOAD] Ingestion Succeeded! HTTP %d\n[UPLOAD] Backend Response: %s\n", httpCode, response.c_str());
     strncpy(lastUploadTimeStr, isoTimestamp + 11, 8); // Extract HH:MM:SS
     lastUploadTimeStr[8] = '\0';
   } else {
-    Serial.printf("[UPLOAD] Failed! Error: %s (code %d)\n", http.errorToString(httpCode).c_str(), httpCode);
+    String errDetail = httpCode > 0 ? http.getString() : http.errorToString(httpCode);
+    Serial.printf("[UPLOAD] Ingestion FAILED! HTTP %d: %s\n", httpCode, errDetail.c_str());
+
+    // Specific actionable diagnostics
+    if (httpCode == 401) {
+      Serial.println(F("[UPLOAD DIAGNOSTIC] 401 Unauthorized: The X-Device-Token was rejected. Obtain a valid token via POST /api/devices or POST /api/devices/:id/rotate-token and update config.h."));
+    } else if (httpCode == 403) {
+      Serial.println(F("[UPLOAD DIAGNOSTIC] 403 Forbidden: The token does not match the DEVICE_ID, or the device is not associated with an authorized farm."));
+    } else if (httpCode == 400) {
+      Serial.printf("[UPLOAD DIAGNOSTIC] 400 Bad Request: Contract validation failed on payload fields: %s\n", errDetail.c_str());
+    } else if (httpCode < 0) {
+      Serial.printf("[UPLOAD DIAGNOSTIC] Network connection failed (%s). Check Wi-Fi RSSI (%d dBm), API_HOST (%s), and port (%d).\n",
+        errDetail.c_str(), currentReadings.wifiRssi, API_HOST, API_PORT);
+    }
+
     snprintf(lastUploadTimeStr, sizeof(lastUploadTimeStr), "Err:%d", httpCode);
+
+    // CRITICAL: Prevent rainfall measurement loss on failed uploads.
+    // Restore the interval pulses to isrRainPulses so they accumulate into the next upload attempt.
+    portENTER_CRITICAL(&rainMux);
+    isrRainPulses += intervalPulses;
+    portEXIT_CRITICAL(&rainMux);
+    cumulativeTotalRainPulses -= intervalPulses; // Prevent double-counting upon retry
   }
 
   http.end();

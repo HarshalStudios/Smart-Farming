@@ -9,3 +9,35 @@
 
 .sensor-page-panel{margin-bottom:16px}.sensor-controls{display:flex;gap:9px;margin-bottom:18px}.sensor-controls select{max-width:210px}.sensor-reading-table{padding:0;overflow:hidden}.sensor-reading-table .panel-heading{padding:19px 20px 0}.reading-row{display:grid;grid-template-columns:1.2fr repeat(4,1fr);gap:14px;padding:12px 20px;border-bottom:1px solid #eff2ed;font-size:10px;color:#667468}.reading-row:last-child{border-bottom:0}.reading-row:not(.table-head) span:not(:first-child){font-weight:700;color:#435447}
 @media(max-width:620px){.sensor-controls{flex-wrap:wrap}.sensor-controls select{flex:1;max-width:none;min-width:130px}.reading-row{min-width:520px;padding:11px 14px}.sensor-reading-table{overflow-x:auto}.sensor-reading-table .panel-heading{min-width:520px}}
+
+/* Phase 4: Live Telemetry & Ingestion Mode Styles */
+.mode-toggle-group{display:flex;align-items:center;background:#eef3eb;padding:3px;border-radius:9px;border:1px solid #e1e9df;gap:2px}
+.mode-toggle-btn{border:0;background:transparent;padding:6px 11px;border-radius:7px;font-size:10px;font-weight:700;color:#6b7b6e;display:flex;align-items:center;gap:6px;transition:all .15s}
+.mode-toggle-btn.active{background:#fff;color:#204b31;box-shadow:0 2px 6px rgba(30,60,40,.08)}
+.mode-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.mode-dot.demo{background:#e0933e}
+.mode-dot.live{background:#2ca459;box-shadow:0 0 0 2px #c9edd5}
+.mode-toggle-btn.live.active .mode-dot.live{animation:pulse-live 1.8s infinite ease-in-out}
+@keyframes pulse-live{0%{transform:scale(0.95);opacity:.8}50%{transform:scale(1.2);opacity:1}100%{transform:scale(0.95);opacity:.8}}
+
+.live-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:#eef7ee;border:1px solid #d4ebd7;border-radius:10px;margin-bottom:20px;font-size:11px;color:#2b633b}
+.live-banner-left{display:flex;align-items:center;gap:10px}
+.live-banner strong{font-weight:700;color:#1e4c2b}
+.live-banner p{margin:2px 0 0;font-size:10px;color:#4e7a59}
+.live-banner-actions{display:flex;align-items:center;gap:8px}
+
+.sensor-unavailable{display:inline-flex;align-items:center;gap:4px;color:#c0504d;font-size:11px;font-weight:700;background:#fdf2f2;padding:3px 7px;border-radius:5px}
+.sensor-stale-tag{display:inline-flex;align-items:center;gap:4px;color:#a0682a;font-size:9px;font-weight:700;background:#fef7ec;padding:2px 6px;border-radius:4px}
+.npk-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.npk-chip{background:#f1f5ee;border:1px solid #e1e9dd;border-radius:6px;padding:3px 7px;font-size:10px;font-weight:600;color:#39543e}
+.npk-chip span{color:#778b7b;margin-right:2px}
+.rain-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px}
+.rain-metric-box{background:#f4f8fc;border:1px solid #e2effa;border-radius:7px;padding:6px 9px}
+.rain-metric-box small{display:block;font-size:8px;color:#6285a8;text-transform:uppercase;font-weight:700;margin-bottom:2px}
+.rain-metric-box strong{font-size:13px;color:#2c5b88}
+.live-meta-row{display:flex;align-items:center;justify-content:space-between;font-size:9px;color:#7e8b80;margin-top:10px;padding-top:8px;border-top:1px dashed #e4ebe2}
+.live-meta-row span{display:flex;align-items:center;gap:5px}
+.reading-row-live{display:grid;grid-template-columns:1.1fr 85px 85px 85px 80px 75px 85px 120px 85px;gap:10px;padding:11px 16px;border-bottom:1px solid #eff2ed;font-size:10px;color:#667468;align-items:center}
+.reading-row-live:last-child{border-bottom:0}
+.chart-state-msg{padding:40px 20px;text-align:center;color:#7f8f82;font-size:11px}
+.chart-state-msg strong{display:block;margin-bottom:4px;color:#35493a;font-size:13px}

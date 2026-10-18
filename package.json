@@ -10,8 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "tsc -b",
-    "test": "tsx server/tests/phase2Test.ts && tsx server/tests/phase3FirmwareTest.ts",
-    "test:firmware": "tsx server/tests/phase3FirmwareTest.ts"
+    "test": "tsx server/tests/phase2Test.ts && tsx server/tests/phase3FirmwareTest.ts && tsx server/tests/phase4LiveIntegrationTest.ts",
+    "test:firmware": "tsx server/tests/phase3FirmwareTest.ts",
+    "test:phase4": "tsx server/tests/phase4LiveIntegrationTest.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",

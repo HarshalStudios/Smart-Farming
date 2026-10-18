@@ -49,12 +49,12 @@
 #define PIN_RS485_TX 17
 #define PIN_RS485_DE_RE 4 // HIGH = Transmit, LOW = Receive
 #define MODBUS_SLAVE_ID 1
-#define MODBUS_BAUDRATE 9600
+#define MODBUS_BAUDRATE 4800 // 4800 baud matching soil sensor default
 
 // Hall-Effect Tipping Bucket Rain Gauge
-#define PIN_RAIN_GAUGE 25
+#define PIN_RAIN_GAUGE 13
 #define RAIN_MM_PER_PULSE 0.1498f // Standard tipping bucket resolution: 0.1498 mm/tip
-#define RAIN_DEBOUNCE_MS 15       // 15ms interrupt debounce
+#define RAIN_DEBOUNCE_MS 100      // 100ms interrupt debounce filtering mechanical contact chatter
 
 // ==========================================
 // 4. Scheduling & Timers

@@ -117,11 +117,28 @@ router.get('/latest', requireUserAuth, (req: AuthenticatedRequest, res: Response
   const params: (string | number)[] = [];
 
   if (deviceId && typeof deviceId === 'string') {
+    const devId = deviceId.trim();
+    // Enforce device access permission for non-admins
+    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+      const dev = db.prepare('SELECT farm_id FROM devices WHERE id = ?').get(devId) as { farm_id: string } | undefined;
+      if (!dev || !req.user!.farmIds.includes(dev.farm_id)) {
+        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for device ${devId}` });
+        return;
+      }
+    }
     query += ' AND device_id = ?';
-    params.push(deviceId.trim());
+    params.push(devId);
   } else if (farmId && typeof farmId === 'string') {
+    const fId = farmId.trim();
+    // Enforce farm access permission for non-admins
+    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+      if (!req.user!.farmIds.includes(fId)) {
+        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for farm ${fId}` });
+        return;
+      }
+    }
     query += ' AND farm_id = ?';
-    params.push(farmId.trim());
+    params.push(fId);
   } else {
     // If neither specified, fetch latest across user's assigned farms
     if (req.user!.role !== 'Admin') {
@@ -154,11 +171,37 @@ router.get('/history', requireUserAuth, (req: AuthenticatedRequest, res: Respons
   const params: (string | number)[] = [cutoffTime];
 
   if (deviceId && typeof deviceId === 'string') {
+    const devId = deviceId.trim();
+    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+      const dev = db.prepare('SELECT farm_id FROM devices WHERE id = ?').get(devId) as { farm_id: string } | undefined;
+      if (!dev || !req.user!.farmIds.includes(dev.farm_id)) {
+        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for device ${devId}` });
+        return;
+      }
+    }
     query += ' AND device_id = ?';
-    params.push(deviceId.trim());
+    params.push(devId);
   } else if (farmId && typeof farmId === 'string') {
+    const fId = farmId.trim();
+    if (req.user!.role !== 'Admin' && req.user!.role !== 'Technician') {
+      if (!req.user!.farmIds.includes(fId)) {
+        res.status(403).json({ error: 'Forbidden', message: `You do not have access to telemetry for farm ${fId}` });
+        return;
+      }
+    }
     query += ' AND farm_id = ?';
-    params.push(farmId.trim());
+    params.push(fId);
+  } else {
+    // If neither specified, limit non-admins to their assigned farms
+    if (req.user!.role !== 'Admin') {
+      const userFarms = req.user!.farmIds;
+      if (userFarms.length === 0) {
+        res.json({ count: 0, windowHours: maxHours, readings: [] });
+        return;
+      }
+      query += ` AND farm_id IN (${userFarms.map(() => '?').join(',')})`;
+      params.push(...userFarms);
+    }
   }
 
   query += ' ORDER BY recorded_at ASC LIMIT ?';

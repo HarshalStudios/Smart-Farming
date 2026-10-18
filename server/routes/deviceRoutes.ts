@@ -5,23 +5,41 @@ import { generateDeviceToken } from '../auth/security';
 
 const router = Router();
 
+// Device status threshold evaluation:
+// Online: active within last 3 minutes (180s)
+// Needs attention / Stale: 3 to 15 minutes (180s - 900s)
+// Offline: > 15 minutes (900s) or no contact
+export function evaluateDeviceStatus(currentStatus: string, lastSeenAt: string | null): 'Online' | 'Offline' | 'Needs attention' | 'Maintenance' {
+  if (currentStatus === 'Maintenance') return 'Maintenance';
+  if (!lastSeenAt) return 'Offline';
+  const ageSec = (Date.now() - new Date(lastSeenAt).getTime()) / 1000;
+  if (ageSec <= 180) return 'Online';
+  if (ageSec <= 900) return 'Needs attention';
+  return 'Offline';
+}
+
 // GET /api/devices - List devices (omits token hashes)
 router.get('/', requireUserAuth, (req: AuthenticatedRequest, res: Response) => {
   const db = getDb();
-  let devices: DbDevice[] = [];
+  let rawDevices: DbDevice[] = [];
 
   if (req.user!.role === 'Admin' || req.user!.role === 'Technician') {
-    devices = db.prepare('SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices').all() as unknown as DbDevice[];
+    rawDevices = db.prepare('SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices').all() as unknown as DbDevice[];
   } else {
     // For farmers and partners, only show devices assigned to their farms
     const userFarms = req.user!.farmIds;
     if (userFarms.length === 0) {
-      devices = [];
+      rawDevices = [];
     } else {
       const placeholders = userFarms.map(() => '?').join(',');
-      devices = db.prepare(`SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices WHERE farm_id IN (${placeholders})`).all(...userFarms) as unknown as DbDevice[];
+      rawDevices = db.prepare(`SELECT id, name, farm_id, hardware_type, status, battery_pct, last_seen_at, created_at FROM devices WHERE farm_id IN (${placeholders})`).all(...userFarms) as unknown as DbDevice[];
     }
   }
+
+  const devices = rawDevices.map(d => ({
+    ...d,
+    status: evaluateDeviceStatus(d.status, d.last_seen_at)
+  }));
 
   res.json({ devices });
 });
