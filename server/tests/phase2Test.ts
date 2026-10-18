@@ -371,6 +371,34 @@ async function runPhase2Tests() {
     const frontendRes = await fetch(`${baseUrl}/`);
     const frontendHtml = await frontendRes.text();
     assert(frontendRes.status === 200 && frontendHtml.includes('<div id="root"></div>'), 'Root URL "/" serves frontend application HTML');
+
+    // 5.14 Unmatched API route returns 404 JSON, not SPA HTML
+    const unknownApiRes = await fetch(`${baseUrl}/api/nonexistent-endpoint-test`);
+    const unknownApiJson = await unknownApiRes.json() as { error: string; path: string };
+    assert(unknownApiRes.status === 404, 'Unmatched API endpoint returns 404 status');
+    assert(unknownApiJson.error === 'Endpoint not found', 'Unmatched API endpoint returns JSON error object');
+
+    // 5.15 Nested unmatched API route returns 404 JSON
+    const nestedUnknownApiRes = await fetch(`${baseUrl}/api/v1/unknown/nested`);
+    const nestedUnknownApiJson = await nestedUnknownApiRes.json() as { error: string; path: string };
+    assert(nestedUnknownApiRes.status === 404 && nestedUnknownApiJson.error === 'Endpoint not found', 'Unmatched nested API endpoint returns 404 JSON');
+
+    // 5.16 Client-side route serves frontend application HTML
+    const clientRouteRes = await fetch(`${baseUrl}/dashboard`);
+    const clientRouteHtml = await clientRouteRes.text();
+    assert(clientRouteRes.status === 200 && clientRouteHtml.includes('<div id="root"></div>'), 'Client-side route "/dashboard" serves frontend application HTML');
+
+    // 5.17 Production SPA fallback router registration regression check
+    const expressModule = (await import('express')).default;
+    const testApp = expressModule();
+    let routeRegisteredWithoutError = false;
+    try {
+      testApp.get('{*path}', (_req, res) => res.send('ok'));
+      routeRegisteredWithoutError = true;
+    } catch {
+      routeRegisteredWithoutError = false;
+    }
+    assert(routeRegisteredWithoutError, 'Express 5 route registration with "{*path}" succeeds without PathError');
   } catch (err: unknown) {
     assert(false, 'HTTP Server E2E Suite', (err as Error).message);
   }

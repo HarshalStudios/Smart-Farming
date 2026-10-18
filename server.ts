@@ -99,6 +99,11 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/v1/telemetry', telemetryRoutes);
 app.use('/api/farms', farmRoutes);
 
+// Unmatched API requests must return 404 JSON, never SPA HTML
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Endpoint not found', path: req.originalUrl });
+});
+
 // Frontend integration: Vite dev middleware in dev, static serving in prod
 async function setupFrontend() {
   // Initialize database first
@@ -118,7 +123,7 @@ async function setupFrontend() {
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('{*path}', (req, res) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
