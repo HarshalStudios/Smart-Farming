@@ -6,19 +6,31 @@ import {
 } from 'lucide-react';
 import { CROPS_CATALOG, type CropProfile, type CropGrowthStage } from '../data/cropsData';
 
+import ModernSensorDataView from './ModernSensorDataView';
+import type { SoilAndEnvReadings } from '../services/cropAnalysisEngine';
+
 interface CropDetailViewProps {
   cropId: string;
   onBack: () => void;
   onLaunchAnalysis: (cropId: string) => void;
+  mode?: 'demo' | 'live' | 'manual';
+  manualReadings?: SoilAndEnvReadings;
+  latestLiveReading?: any;
+  liveHistory?: any[];
 }
 
 export default function CropDetailView({
   cropId,
   onBack,
-  onLaunchAnalysis
+  onLaunchAnalysis,
+  mode = 'demo',
+  manualReadings = {},
+  latestLiveReading,
+  liveHistory = []
 }: CropDetailViewProps) {
   const crop: CropProfile = CROPS_CATALOG.find(c => c.id === cropId) || CROPS_CATALOG[0];
   const [selectedStageIndex, setSelectedStageIndex] = useState<number>(0);
+  const [detailTab, setDetailTab] = useState<'profile' | 'telemetry'>('profile');
   const activeStage: CropGrowthStage = crop.growthStages[selectedStageIndex] || crop.growthStages[0];
 
   return (
@@ -29,10 +41,45 @@ export default function CropDetailView({
           <ArrowLeft size={16}/> Back to Crop Catalog
         </button>
 
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => onLaunchAnalysis(crop.id)}
-        >
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="segmented-toggle" style={{ margin: 0 }}>
+            <button
+              className={`toggle-option ${detailTab === 'profile' ? 'active' : ''}`}
+              onClick={() => setDetailTab('profile')}
+            >
+              <Sprout size={14}/> Agronomic Profile
+            </button>
+            <button
+              className={`toggle-option ${detailTab === 'telemetry' ? 'active' : ''}`}
+              onClick={() => setDetailTab('telemetry')}
+            >
+              <Activity size={14}/> Sensor Data & Graphs
+            </button>
+          </div>
+
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => onLaunchAnalysis(crop.id)}
+          >
+            <Sparkles size={15}/> Analyze in Workflow <ChevronRight size={14}/>
+          </button>
+        </div>
+      </div>
+
+      {detailTab === 'telemetry' ? (
+        <div style={{ marginTop: 16 }}>
+          <ModernSensorDataView
+            mode={mode}
+            manualReadings={manualReadings}
+            latestLiveReading={latestLiveReading}
+            liveHistory={liveHistory}
+            cropName={crop.name}
+            plotName="Land L-01"
+            onNavigateToCropAnalysis={() => onLaunchAnalysis(crop.id)}
+          />
+        </div>
+      ) : (
+        <>
           <Sparkles size={15}/> Analyze This Crop in Workflow <ChevronRight size={14}/>
         </button>
       </div>
@@ -312,6 +359,8 @@ export default function CropDetailView({
           <Sparkles size={18}/> Launch Crop Analysis Workflow
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 }

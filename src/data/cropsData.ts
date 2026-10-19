@@ -13,7 +13,7 @@ export interface CropGrowthStage {
 
 export interface PestDiseaseInfo {
   name: string;
-  type: 'Fungal' | 'Bacterial' | 'Viral' | 'Insect / Pest';
+  type: 'Fungal' | 'Bacterial' | 'Viral' | 'Insect / Pest' | 'Nutritional / Fungal' | 'Nutritional / Physiological';
   favorableConditions: string;
   symptoms: string;
   prevention: string;

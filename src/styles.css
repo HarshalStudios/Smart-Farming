@@ -485,3 +485,2098 @@
 .bullet-icon{flex:none;margin-top:2px}
 
 .space-between{display:flex;align-items:center;justify-content:space-between;width:100%}
+
+/* ==========================================================================
+   Typography & Viewport Openness Polish
+   ========================================================================== */
+body {
+  font-size: 14px !important;
+  line-height: 1.55;
+  color: #1e293b;
+}
+
+.table-head, .stat-label, .reading-row, .device-row, .user-row, .alert-table-row {
+  font-size: 12.5px;
+}
+
+.subheading {
+  font-size: 13.5px !important;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   Source Pills & Indicators
+   ========================================================================== */
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.source-pill.manual {
+  background: #0d9488;
+  color: #fff;
+}
+
+.source-pill.live {
+  background: #16a34a;
+  color: #fff;
+}
+
+.source-pill.demo {
+  background: #d97706;
+  color: #fff;
+}
+
+/* ==========================================================================
+   Crop Analysis: Scenario Presets Bar
+   ========================================================================== */
+.scenarios-bar {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.scenarios-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scenarios-header strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.scenarios-header span {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.scenarios-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scenario-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.scenario-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.scenario-btn.active {
+  background: #236642;
+  border-color: #236642;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(35, 102, 66, 0.25);
+}
+
+.scenario-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.scenario-badge.stress {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.scenario-badge.deficit {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.scenario-badge.optimal {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.scenario-btn.active .scenario-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* ==========================================================================
+   Priority 4: 8-Aspect Agronomic Assessment Cards
+   ========================================================================== */
+.aspects-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 900px) {
+  .aspects-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.aspect-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.aspect-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.aspect-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.aspect-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.aspect-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.aspect-title {
+  font-family: Manrope, sans-serif;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.aspect-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.aspect-badge.optimal { background: #dcfce7; color: #15803d; }
+.aspect-badge.warning { background: #fef3c7; color: #b45309; }
+.aspect-badge.critical { background: #fee2e2; color: #b91c1c; }
+.aspect-badge.unavailable { background: #f1f5f9; color: #64748b; }
+
+.aspect-stat-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.aspect-stat-strip .value-block strong {
+  font-family: Manrope, sans-serif;
+  font-size: 16px;
+  color: #0f172a;
+  display: block;
+}
+
+.aspect-stat-strip .value-block small {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.aspect-stat-strip .ref-block {
+  text-align: right;
+}
+
+.aspect-stat-strip .ref-block small {
+  font-size: 11px;
+  color: #64748b;
+  display: block;
+}
+
+.aspect-stat-strip .ref-block strong {
+  font-size: 12px;
+  color: #236642;
+}
+
+.aspect-explanation {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #334155;
+  margin: 0;
+}
+
+.aspect-actions {
+  background: #fafaf9;
+  border-left: 3px solid #236642;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 14px;
+}
+
+.aspect-actions strong {
+  font-size: 11.5px;
+  color: #0f172a;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.aspect-actions ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.aspect-actions li {
+  margin-bottom: 3px;
+}
+
+.aspect-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+/* ==========================================================================
+   Priority 6: Irrigation Volume Calculation Callout Box
+   ========================================================================== */
+.irrigation-calc-box {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 22px;
+}
+
+.calc-box-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.calc-box-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.calc-box-title h3 {
+  font-family: Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  color: #14532d;
+  margin: 0 0 3px;
+}
+
+.calc-box-title p {
+  font-size: 12px;
+  color: #166534;
+  margin: 0;
+}
+
+.calc-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 800px) {
+  .calc-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.calc-metric-card {
+  background: #fff;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.calc-metric-card small {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #15803d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+}
+
+.calc-metric-card strong {
+  font-family: Manrope, sans-serif;
+  font-size: 20px;
+  color: #14532d;
+  display: block;
+  margin: 4px 0 2px;
+}
+
+.calc-metric-card span {
+  font-size: 11px;
+  color: #4ade80;
+}
+
+.calc-formula-note {
+  background: #fff;
+  border: 1px solid #dcfce7;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #166534;
+  line-height: 1.5;
+}
+
+.calc-formula-note code {
+  font-family: monospace;
+  background: #f0fdf4;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #14532d;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   Priority 7: Engine Provenance & Scientific Methodology
+   ========================================================================== */
+.provenance-box {
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 22px;
+}
+
+.provenance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.provenance-header h4 {
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: #292524;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provenance-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #78716c;
+  background: #f5f5f4;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.provenance-body {
+  font-size: 12px;
+  color: #57534e;
+  line-height: 1.6;
+}
+
+.provenance-body p {
+  margin: 0 0 10px;
+}
+
+.provenance-refs-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 11.5px;
+  color: #44403c;
+}
+
+.provenance-refs-list li {
+  margin-bottom: 4px;
+}
+
+/* ==========================================================================
+   Manual Mode Controls & Emulation Lab
+   ========================================================================== */
+.manual-mode-control-panel {
+  background: #fff;
+  border: 1.5px solid #a7f3d0;
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.08);
+}
+
+.manual-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f0fdf4;
+}
+
+.manual-title-block h3 {
+  font-family: Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  color: #065f46;
+  margin: 6px 0 4px;
+}
+
+.manual-title-block p {
+  font-size: 12.5px;
+  color: #047857;
+  margin: 0;
+  max-width: 620px;
+  line-height: 1.5;
+}
+
+.manual-presets-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.presets-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preset-buttons-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.preset-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.preset-btn.active {
+  background: #0d9488;
+  border-color: #0d9488;
+  color: #fff;
+}
+
+.preset-btn.reset-btn {
+  border-color: #e2e8f0;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.preset-btn.reset-btn:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.manual-sliders-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 960px) {
+  .manual-sliders-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .manual-sliders-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.manual-slider-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.slider-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.slider-icon-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.slider-header-row strong {
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.manual-slider-card input[type="range"] {
+  width: 100%;
+  accent-color: #0d9488;
+  cursor: pointer;
+  margin: 4px 0;
+}
+
+.slider-scale-limits {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: #94a3b8;
+}
+
+/* ==========================================================================
+   Priority 10: Maharashtra Agro-Climatic Seasonal Calendar
+   ========================================================================== */
+.crop-calendar-container {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 24px;
+  margin-top: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.calendar-seasons-tabs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  margin: 16px 0;
+}
+
+.calendar-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.calendar-tab-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.calendar-tab-btn.active {
+  background: #236642;
+  border-color: #236642;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(35, 102, 66, 0.25);
+}
+
+.season-context-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+
+.season-context-box strong {
+  font-size: 13.5px;
+  color: #14532d;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.season-context-box p {
+  font-size: 12.5px;
+  color: #166534;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.calendar-crops-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.calendar-crops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.calendar-crops-table th {
+  background: #f8fafc;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.calendar-crops-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf2f7;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.calendar-crops-table tr:hover td {
+  background: #fcfdfa;
+}
+
+.calendar-crops-table tr:last-child td {
+  border-bottom: none;
+}
+
+.cal-crop-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cal-crop-emoji {
+  font-size: 26px;
+  flex: none;
+}
+
+.cal-crop-cell strong {
+  font-size: 13.5px;
+  color: #0f172a;
+  display: block;
+}
+
+.cal-crop-cell small {
+  font-size: 11px;
+  color: #64748b;
+  display: block;
+}
+
+.cal-intervention {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.calendar-footer-disclaimer {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  line-height: 1.5;
+  padding-top: 8px;
+}
+
+/* ==========================================================================
+   Modern Sensor Data View & Agronomic Analytics Styling (Specification Aligned)
+   ========================================================================== */
+
+.modern-sensor-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 0 32px;
+}
+
+/* 1. Crop Stage Stepper */
+.crop-stage-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.crop-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.crop-stage-title {
+  font-family: Manrope, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.crop-stage-context {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.crop-stage-context strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.crop-stage-timeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.stage-node-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex: none;
+  z-index: 2;
+}
+
+.stage-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.stage-circle.done {
+  background: #114b32;
+  color: #ffffff;
+  box-shadow: 0 2px 5px rgba(17, 75, 50, 0.25);
+}
+
+.stage-circle.active {
+  background: #ffffff;
+  border: 3.5px solid #114b32;
+  box-shadow: 0 0 0 3px rgba(17, 75, 50, 0.15);
+}
+
+.stage-circle.active .inner-dot {
+  width: 8px;
+  height: 8px;
+  background: #114b32;
+  border-radius: 50%;
+}
+
+.stage-circle.pending {
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+}
+
+.stage-line {
+  flex: 1;
+  height: 3px;
+  background: #e2e8f0;
+  margin: 0 6px;
+  margin-bottom: 22px;
+  z-index: 1;
+}
+
+.stage-line.filled {
+  background: #114b32;
+}
+
+.stage-label {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.stage-label.font-bold {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+/* 2. Sensor 12-Card Grid */
+.sensor-data-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-main-heading {
+  font-family: Manrope, sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+
+.reading-pick-hint {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.sensor-cards-12-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1200px) {
+  .sensor-cards-12-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .sensor-cards-12-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.metric-tile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 110px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.metric-tile-card:hover {
+  border-color: #94a3b8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.metric-tile-card.selected-active {
+  background: #114b32 !important;
+  color: #ffffff !important;
+  border-color: #114b32 !important;
+  box-shadow: 0 6px 18px rgba(17, 75, 50, 0.35);
+  transform: translateY(-2px);
+}
+
+.metric-tile-card.selected-active .tile-icon,
+.metric-tile-card.selected-active .tile-name,
+.metric-tile-card.selected-active .tile-big-val,
+.metric-tile-card.selected-active .tile-unit {
+  color: #ffffff !important;
+}
+
+.metric-tile-card.selected-active .tile-status-pill {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+.metric-tile-card.selected-active .tile-optional-note {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.tile-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tile-icon {
+  color: #166534;
+  flex: none;
+}
+
+.tile-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 6px 0 8px;
+}
+
+.tile-big-val {
+  font-family: Manrope, sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.tile-unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.tile-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tile-status-pill {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.tile-status-pill.status-normal {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.tile-status-pill.status-low {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tile-status-pill.status-high {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.tile-optional-note {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+/* 3. Metric Inspection Panel */
+.metric-inspection-panel {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr;
+  gap: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 900px) {
+  .metric-inspection-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+.inspection-left-chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.inspection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.inspection-title {
+  font-family: Manrope, sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.period-segmented-controls {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.period-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.period-btn.active {
+  background: #114b32;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(17, 75, 50, 0.25);
+}
+
+.inspection-chart-container {
+  width: 100%;
+}
+
+.inspection-svg {
+  width: 100%;
+  height: 180px;
+}
+
+.chart-x-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 6px 20px 0;
+}
+
+.inspection-right-now {
+  border-left: 1px solid #f1f5f9;
+  padding-left: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .inspection-right-now {
+    border-left: none;
+    border-top: 1px solid #f1f5f9;
+    padding-left: 0;
+    padding-top: 16px;
+  }
+}
+
+.right-now-title {
+  font-family: Manrope, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 12px;
+}
+
+.right-now-metric-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.right-now-val {
+  font-family: Manrope, sans-serif;
+  font-size: 36px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.right-now-val small {
+  font-size: 16px;
+  font-weight: 600;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+.right-now-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.right-now-badge.normal {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.right-now-badge.low {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.right-now-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.spec-row strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+/* 4. Analytics Quad Grid (Screenshot 2) */
+.analytics-quad-grid,
+.visual-charts-2x2-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .analytics-quad-grid,
+  .visual-charts-2x2-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.analytics-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.analytics-title {
+  font-family: Manrope, sans-serif;
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.safe-range-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.safe-range-box-sample {
+  width: 18px;
+  height: 11px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 2px;
+}
+
+/* Nutrient Meters Stack */
+.nutrient-meters-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nutrient-meter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nutrient-row-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #334155;
+}
+
+.nutrient-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.nutrient-reading strong {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.meter-track-container {
+  height: 14px;
+  background: #f1f5f9;
+  border-radius: 7px;
+  position: relative;
+  overflow: hidden;
+}
+
+.meter-safe-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #dcfce7;
+  border-left: 1px dashed #86efac;
+  border-right: 1px dashed #86efac;
+}
+
+.meter-fill-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 7px;
+  transition: width 0.3s ease;
+}
+
+.meter-fill-bar.fill-green {
+  background: #114b32;
+}
+
+.meter-fill-bar.fill-orange {
+  background: #d97706;
+}
+
+.meter-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 2px 2px 0;
+}
+
+.meter-scale-labels .safe-label {
+  color: #15803d;
+  font-weight: 600;
+}
+
+/* Reaction Sliders Stack */
+.reaction-sliders-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 8px;
+}
+
+.reaction-slider-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reaction-row-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.reaction-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.slider-track-wrap {
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  position: relative;
+  margin: 14px 0 4px;
+}
+
+.slider-safe-box {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+}
+
+.slider-marker-pointer {
+  position: absolute;
+  top: -12px;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+}
+
+.down-triangle {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #0f172a;
+}
+
+.slider-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 2px 2px 0;
+}
+
+.slider-scale-labels .safe-label {
+  color: #15803d;
+  font-weight: 600;
+}
+
+/* Dual Axis Temperature & Humidity Chart */
+.chart-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 11.5px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.legend-line {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.legend-line.line-orange {
+  background: #c2410c;
+}
+
+.legend-line.line-blue {
+  background: #2563eb;
+}
+
+.dual-axis-chart-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.y-axis-left,
+.y-axis-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 120px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.y-axis-left {
+  color: #c2410c;
+}
+
+.y-axis-right {
+  color: #2563eb;
+}
+
+.dual-axis-svg {
+  flex: 1;
+  height: 120px;
+}
+
+/* Rainfall Bars */
+.rainfall-bars-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 140px;
+  padding-top: 8px;
+}
+
+.rainfall-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.bar-val-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.bar-track {
+  width: 28px;
+  height: 90px;
+  display: flex;
+  align-items: flex-end;
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.bar-fill {
+  width: 100%;
+  background: #0284c7;
+  border-radius: 4px 4px 0 0;
+  min-height: 3px;
+}
+
+.bar-day-label {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* 5. Agronomic Advice Section (Screenshot 3) */
+.advice-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.advice-head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.advice-title {
+  font-family: Manrope, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.advice-rec-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.advice-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .advice-cards-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.advice-pill-card {
+  display: flex;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.advice-icon-bubble {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.advice-icon-bubble.bubble-blue {
+  background: #e0f2fe;
+}
+
+.advice-icon-bubble.bubble-amber {
+  background: #fef3c7;
+}
+
+.advice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.advice-card-heading {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.advice-card-text {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.prescription-math-strip {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: #475569;
+}
+
+/* 6. Recent Readings Table (Screenshot 3) */
+.recent-readings-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.recent-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.recent-title {
+  font-family: Manrope, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.download-csv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #114b32;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.download-csv-btn:hover {
+  background: #f0fdf4;
+}
+
+.recent-table-wrap {
+  overflow-x: auto;
+}
+
+.recent-sensors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.recent-sensors-table th {
+  background: #f8fafc;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.recent-sensors-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.recent-sensors-table tr:hover td {
+  background: #fcfdfa;
+}
+
+/* ==========================================================================
+   Crop Analysis Visual Analytics Sub-View
+   ========================================================================== */
+
+.result-mode-toggle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.segmented-toggle {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.toggle-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.toggle-option.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.visual-analytics-root {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.analytics-hero-banner {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 22px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 900px) {
+  .analytics-hero-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.analytics-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+}
+
+.score-ring-wrap {
+  width: 96px;
+  height: 96px;
+  position: relative;
+  flex: none;
+}
+
+.score-ring-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.score-ring-center {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-ring-num {
+  font-family: Manrope, sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.score-ring-denom {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.score-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-headline-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.score-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  color: #15803d;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.score-rating-title {
+  font-family: Manrope, sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.score-brief {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.score-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.metric-chip {
+  background: #f1f5f9;
+  color: #334155;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.analytics-kpi-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.kpi-micro-box {
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kpi-micro-box small {
+  font-size: 10px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+
+.kpi-micro-box strong {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.kpi-micro-box span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Water Balance Container */
+.water-balance-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.water-balance-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.water-balance-track {
+  height: 20px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  position: relative;
+  overflow: visible;
+  display: flex;
+}
+
+.water-segment.wilting {
+  background: #fecaca;
+  border-radius: 10px 0 0 10px;
+}
+
+.water-segment.current {
+  background: #38bdf8;
+  height: 100%;
+}
+
+.target-moisture-marker {
+  position: absolute;
+  top: -24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.target-moisture-marker .marker-pin {
+  width: 2px;
+  height: 44px;
+  background: #114b32;
+  z-index: 2;
+}
+
+.target-moisture-marker span {
+  position: absolute;
+  top: -18px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #114b32;
+  white-space: nowrap;
+  background: #ffffff;
+  padding: 1px 5px;
+  border: 1px solid #114b32;
+  border-radius: 4px;
+}
+
+.water-calc-summary {
+  display: flex;
+  justify-content: space-between;
+  background: #f8fafc;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-top: 14px;
+}
+
+.calc-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calc-kpi small {
+  font-size: 10px;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.calc-kpi strong {
+  font-size: 13.5px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+/* 8-Aspect Bar Chart Stack */
+.aspects-bar-chart-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aspect-chart-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aspect-row-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.aspect-row-name {
+  font-weight: 600;
+  color: #334155;
+}
+
+.aspect-row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aspect-row-val {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.aspect-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.aspect-status-dot.dot-normal {
+  background: #16a34a;
+}
+
+.aspect-status-dot.dot-watch {
+  background: #eab308;
+}
+
+.aspect-status-dot.dot-warning {
+  background: #f97316;
+}
+
+.aspect-status-dot.dot-critical {
+  background: #ef4444;
+}
+
+.aspect-progress-track {
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.aspect-progress-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.aspect-progress-bar.bar-normal {
+  background: #16a34a;
+}
+
+.aspect-progress-bar.bar-watch {
+  background: #eab308;
+}
+
+.aspect-progress-bar.bar-warning {
+  background: #f97316;
+}
+
+.aspect-progress-bar.bar-critical {
+  background: #ef4444;
+}
+
+.switch-to-audit-callout {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+

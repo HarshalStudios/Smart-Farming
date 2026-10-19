@@ -6,7 +6,7 @@ import {
   LogOut, Menu, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Sprout,
   Thermometer, Tractor, TrendingUp, Users, Waves, X, MapPin, Pencil, Trash2,
   RefreshCw, CalendarDays, CircleUserRound, SlidersHorizontal, Wrench, Radio,
-  Database, Key, Copy, Table, Eye, ArrowUpDown, Server, GraduationCap, Sparkles
+  Database, Key, Copy, Table, Eye, EyeOff, Lock, ArrowUpDown, Server, GraduationCap, Sparkles
 } from 'lucide-react'
 import DatabaseExplorer from './components/DatabaseExplorer'
 import CropAnalysisWorkflow from './components/CropAnalysisWorkflow'
@@ -14,6 +14,8 @@ import CropLibrary from './components/CropLibrary'
 import CropDetailView from './components/CropDetailView'
 import ManualModeControls from './components/ManualModeControls'
 import ProfessorDemoGuideModal from './components/ProfessorDemoGuideModal'
+import MaharashtraCropCalendar from './components/MaharashtraCropCalendar'
+import ModernSensorDataView from './components/ModernSensorDataView'
 import { CROPS_CATALOG } from './data/cropsData'
 import type { SoilAndEnvReadings } from './services/cropAnalysisEngine'
 
@@ -24,7 +26,7 @@ type Crop = { id: string; name: string; emoji: string; stage: string; farmId: st
 type Device = { id: string; name: string; farmId: string; kind: string; status: 'Online' | 'Offline' | 'Needs attention' | 'Maintenance'; battery: number; lastSeen: string; notes: string }
 type AlertItem = { id: string; title: string; message: string; severity: 'Critical' | 'Warning' | 'Info'; status: 'Active' | 'Acknowledged' | 'Resolved'; farmId: string; time: string; action: string }
 type Reading = { time: string; moisture: number; temperature: number; humidity: number; ph: number }
-type Page = 'Dashboard' | 'Crop analysis' | 'Crops' | 'Crop detail' | 'Sensor data' | 'Alerts' | 'Alert patterns' | 'Farms & lands' | 'Devices' | 'Users' | 'Profile' | 'Settings' | 'Help & support' | 'Database explorer'
+type Page = 'Dashboard' | 'Crop analysis' | 'Crops' | 'Crop detail' | 'Crop calendar' | 'Sensor data' | 'Alerts' | 'Alert patterns' | 'Farms & lands' | 'Devices' | 'Users' | 'Profile' | 'Settings' | 'Help & support' | 'Database explorer'
 
 export interface DbTelemetryReading {
   id: number;
@@ -132,6 +134,8 @@ const navItems: { page: Page; icon: typeof LayoutDashboard; roles: Role[] }[] = 
   { page: 'Dashboard', icon: LayoutDashboard, roles: ['Admin','Farmer','Partner','Technician'] },
   { page: 'Crop analysis', icon: Sparkles, roles: ['Admin','Farmer','Partner','Technician'] },
   { page: 'Crops', icon: Sprout, roles: ['Admin','Farmer','Partner'] },
+  { page: 'Crop calendar', icon: CalendarDays, roles: ['Admin','Farmer','Partner','Technician'] },
+  { page: 'Sensor data', icon: Activity, roles: ['Admin','Farmer','Partner','Technician'] },
   { page: 'Farms & lands', icon: Tractor, roles: ['Admin','Farmer','Partner'] },
   { page: 'Alerts', icon: Bell, roles: ['Admin','Farmer','Partner','Technician'] },
   { page: 'Alert patterns', icon: SlidersHorizontal, roles: ['Admin'] },
@@ -417,24 +421,22 @@ export default function App() {
   const logout = () => {
     setUserId(null);
     setSessionToken(null);
+    localStorage.removeItem(SESSION);
+    localStorage.removeItem(TOKEN_KEY);
     setPage('Dashboard');
     setModal(null);
-    notify('You have logged out')
-  }
+    notify('You have logged out');
+  };
 
   const resetData = () => {
     setStore(freshData());
     setUserId('u-admin');
     setPage('Dashboard');
     setModal(null);
-    notify('Demo data restored to defaults')
-  }
+    notify('Demo data restored to defaults');
+  };
 
-  if (!user) {
-    return <Login users={store.users} onLogin={u => { setUserId(u.id); authenticateUserSession(u); setPage('Dashboard') }} />
-  }
-
-  const title = page === 'Crop detail' ? (currentCrop?.name ?? 'Crop detail') : page
+  const title = page === 'Crop detail' ? (currentCrop?.name ?? 'Crop detail') : page;
 
   // Parse raw telemetry payload if available
   let parsedRawPayload: any = null;
@@ -477,15 +479,16 @@ export default function App() {
     ph: { label: 'Soil pH', unit: 'pH', color: '#8d73c6', icon: Activity },
     ec: { label: 'Electrical conductivity', unit: 'µS/cm', color: '#4a85a4', icon: Radio },
     rainfall: { label: 'Rainfall (interval)', unit: 'mm', color: '#387ba3', icon: CloudSun }
-  }
+  };
 
   const manualChartValues = useMemo(() => {
-    const base = metric === 'moisture' ? manualReadings.soilMoisture :
-                 metric === 'temperature' ? manualReadings.airTemperature :
-                 metric === 'humidity' ? manualReadings.relativeHumidity :
-                 metric === 'ph' ? manualReadings.soilPh :
-                 metric === 'ec' ? manualReadings.ec :
-                 manualReadings.rainfall ?? 0;
+    const raw = metric === 'moisture' ? manualReadings.soilMoisture :
+                metric === 'temperature' ? manualReadings.airTemperature :
+                metric === 'humidity' ? manualReadings.relativeHumidity :
+                metric === 'ph' ? manualReadings.soilPh :
+                metric === 'ec' ? manualReadings.ec :
+                manualReadings.rainfall;
+    const base = typeof raw === 'number' ? raw : 0;
     return demoReadings.map((_, i) => {
       const variation = Math.sin(i * 0.4) * (base * 0.05);
       return Number((base + variation).toFixed(1));
@@ -504,14 +507,14 @@ export default function App() {
   const chartCurrentStr = mode === 'live'
     ? (latestLiveVal !== null ? `${latestLiveVal}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}` : 'Unavailable')
     : mode === 'manual'
-    ? `${metric === 'moisture' ? manualReadings.soilMoisture.toFixed(1) : metric === 'temperature' ? manualReadings.airTemperature.toFixed(1) : metric === 'humidity' ? manualReadings.relativeHumidity.toFixed(0) : metric === 'ph' ? manualReadings.soilPh.toFixed(2) : metric === 'ec' ? manualReadings.ec : (manualReadings.rainfall ?? 0).toFixed(1)}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}`
+    ? `${metric === 'moisture' ? (manualReadings.soilMoisture ?? 0).toFixed(1) : metric === 'temperature' ? (manualReadings.airTemperature ?? 0).toFixed(1) : metric === 'humidity' ? (manualReadings.relativeHumidity ?? 0).toFixed(0) : metric === 'ph' ? (manualReadings.soilPh ?? 0).toFixed(2) : metric === 'ec' ? (manualReadings.ec ?? 0) : (manualReadings.rainfall ?? 0).toFixed(1)}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}`
     : `${latestDemo[metric as 'moisture'|'temperature'|'humidity'|'ph'] || 0}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}`;
 
   // Soil moisture for card
   const soilMoistureDisplay = mode === 'live'
     ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_moisture_pct !== null ? `${latestLiveReading.soil_moisture_pct.toFixed(1)}%` : 'Unavailable')
     : mode === 'manual'
-    ? `${manualReadings.soilMoisture.toFixed(1)}%`
+    ? (manualReadings.soilMoisture != null ? `${manualReadings.soilMoisture.toFixed(1)}%` : 'Unavailable')
     : `${latestDemo.moisture}%`;
 
   const activeReadings: SoilAndEnvReadings = useMemo(() => {
@@ -543,6 +546,26 @@ export default function App() {
       rainfall: 0
     };
   }, [mode, manualReadings, latestLiveReading, latestDemo]);
+
+  if (!user) {
+    return (
+      <Login
+        users={store.users}
+        onLoginSuccess={(u, token) => {
+          setUserId(u.id);
+          if (token) setSessionToken(token);
+          setPage('Dashboard');
+          notify(`Welcome back, ${u.name}!`);
+        }}
+        onDemoBypass={(u) => {
+          setUserId(u.id);
+          setMode('demo');
+          setPage('Dashboard');
+          notify(`Entered Demo Mode as ${u.name} (Offline presentation access)`);
+        }}
+      />
+    );
+  }
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -647,13 +670,13 @@ export default function App() {
       </header>
 
       <div className="content">
-        {/* Live Ingestion Status Banner */}
+        {/* Operating Mode Status Banners */}
         {mode === 'live' && (
           <div className="live-banner">
             <div className="live-banner-left">
-              <span className="mode-dot live"/>
+              <span className="source-pill live">REAL SENSOR DATA</span>
               <div>
-                <strong>Live Telemetry Stream Active (SQLite Ingestion)</strong>
+                <strong>Live Telemetry Stream Active (Local Database Ingestion)</strong>
                 <p>
                   {latestLiveReading ? (
                     <>Latest sample from <strong>{latestLiveReading.device_id}</strong> on {currentFarm(latestLiveReading.farm_id)} ({formatRelativeTime(latestLiveReading.recorded_at)}). Auto-polling every 10s.</>
@@ -672,6 +695,46 @@ export default function App() {
           </div>
         )}
 
+        {mode === 'manual' && (
+          <div className="manual-banner" style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="source-pill manual" style={{ background: '#059669', color: '#fff', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999 }}>MANUAL INPUT</span>
+              <div>
+                <strong style={{ color: '#065f46', fontSize: 14 }}>Interactive Sensor Emulation Active</strong>
+                <p style={{ margin: 0, fontSize: 12, color: '#047857' }}>
+                  Adjust soil moisture, temp, pH & nutrients directly below. Works offline without hardware connection.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary btn-xs" onClick={() => changePage('Crop analysis')}>
+                <Sparkles size={13}/> Run Crop Analysis
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'demo' && (
+          <div className="demo-banner" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span className="source-pill demo" style={{ background: '#d97706', color: '#fff', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 999 }}>DEMONSTRATION ANALYSIS</span>
+              <div>
+                <strong style={{ color: '#92400e', fontSize: 14 }}>Curated Realistic Demonstration Data</strong>
+                <p style={{ margin: 0, fontSize: 12, color: '#b45309' }}>
+                  Demonstrating precision farming telemetry using standardized scenarios for academic presentation.
+                </p>
+              </div>
+            </div>
+            <button
+              className="btn btn-light btn-xs"
+              style={{ background: '#fff', borderColor: '#fcd34d', color: '#92400e', fontWeight: 700 }}
+              onClick={() => setShowGuideModal(true)}
+            >
+              <GraduationCap size={14}/> Presentation Walkthrough
+            </button>
+          </div>
+        )}
+
         {/* Dashboard View */}
         {page === 'Dashboard' && <section>
           <div className="page-heading">
@@ -679,7 +742,7 @@ export default function App() {
               <p className="eyebrow">{new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
               <h1>Good morning, {user.name.split(' ')[0]} <span>🌱</span></h1>
               <p className="subheading">
-                {mode === 'live' ? 'Showing real sensor telemetry and hardware connectivity.' : `Here’s what’s happening across your ${user.role === 'Admin' ? 'farming network' : 'assigned farms'} today.`}
+                {mode === 'live' ? 'Showing real sensor telemetry and hardware connectivity.' : mode === 'manual' ? 'Interactive manual emulation mode — adjust readings and test crop responses.' : `Here’s what’s happening across your ${user.role === 'Admin' ? 'farming network' : 'assigned farms'} today.`}
               </p>
             </div>
             <button className="btn btn-primary" onClick={() => changePage(user.role === 'Technician' ? 'Devices' : 'Farms & lands')}>
@@ -689,18 +752,29 @@ export default function App() {
 
           <div className="stat-grid">
             <StatCard label="Total farms" value={visibleFarms.length} detail={`${visibleFarms.reduce((a,f)=>a+f.area,0).toFixed(1)} hectares`} icon={Tractor} tint="green" trend="Your farm network"/>
-            <StatCard label="Active devices" value={`${displayActiveDevices}/${displayTotalDevices}`} detail={displayTotalDevices ? `${Math.round(displayActiveDevices/displayTotalDevices*100)}% online` : 'No devices'} icon={Cpu} tint="blue" trend={mode === 'live' ? 'Live status (<3m)' : 'Device connectivity'}/>
+            <StatCard label="Active devices" value={`${displayActiveDevices}/${displayTotalDevices}`} detail={displayTotalDevices ? `${Math.round(displayActiveDevices/displayTotalDevices*100)}% online` : 'No devices'} icon={Cpu} tint="blue" trend={mode === 'live' ? 'Live status (<3m)' : mode === 'manual' ? 'Virtual Node' : 'Device connectivity'}/>
             <StatCard label="Active alerts" value={activeAlerts.length} detail={activeAlerts.filter(a=>a.severity==='Critical').length+' critical'} icon={AlertTriangle} tint="orange" trend="Needs attention"/>
-            <StatCard label="Avg. soil moisture" value={soilMoistureDisplay} detail={mode === 'live' ? (latestLiveReading?.modbus_valid ? 'Latest Modbus probe' : 'Sensor offline') : 'Latest demo sample'} icon={Droplets} tint="purple" trend={mode === 'live' ? 'Live Reading' : 'Simulated'}/>
+            <StatCard label="Avg. soil moisture" value={soilMoistureDisplay} detail={mode === 'live' ? (latestLiveReading?.modbus_valid ? 'Latest Modbus probe' : 'Sensor offline') : mode === 'manual' ? 'Manual Emulation' : 'Latest demo sample'} icon={Droplets} tint="purple" trend={mode === 'live' ? 'Live Reading' : mode === 'manual' ? 'Manual Input' : 'Simulated'}/>
           </div>
+
+          {/* Manual Mode Controls Panel on Dashboard */}
+          {mode === 'manual' && (
+            <div style={{ marginBottom: 20 }}>
+              <ManualModeControls
+                readings={manualReadings}
+                onChange={setManualReadings}
+                onNavigateToAnalysis={() => changePage('Crop analysis')}
+              />
+            </div>
+          )}
 
           <div className="dashboard-grid">
             {/* Chart Panel */}
             <section className="panel chart-panel">
               <div className="panel-heading">
                 <div>
-                  <h2>{mode === 'live' ? 'Live Sensor Analytics' : 'Sensor analytics'}</h2>
-                  <p>{mode === 'live' ? `Historical records from ${dbEngine} for ${currentFarm(selectedFarmFilter)}` : 'Historical demo readings across your farms'}</p>
+                  <h2>{mode === 'live' ? 'Live Sensor Analytics' : mode === 'manual' ? 'Manual Emulated Analytics' : 'Sensor analytics'}</h2>
+                  <p>{mode === 'live' ? `Historical records from ${dbEngine} for ${currentFarm(selectedFarmFilter)}` : mode === 'manual' ? 'Calculated curve based on your manual parameter inputs' : 'Historical demo readings across your farms'}</p>
                 </div>
                 <div className="chart-controls">
                   <select aria-label="Farm selection" value={selectedFarmFilter} onChange={e => setSelectedFarmFilter(e.target.value)}>
@@ -725,7 +799,7 @@ export default function App() {
                   <strong>{chartCurrentStr}</strong>
                 </div>
                 <span className="trend-chip">
-                  <TrendingUp size={14}/> {mode === 'live' ? `Live feed (${chartValuesToRender.length} pts)` : 'Demo history'}
+                  <TrendingUp size={14}/> {mode === 'live' ? `Live feed (${chartValuesToRender.length} pts)` : mode === 'manual' ? 'Manual input' : 'Demo history'}
                 </span>
               </div>
 
@@ -751,7 +825,7 @@ export default function App() {
 
               <div className="chart-foot">
                 <span><i className="legend-dot" style={{background:metricMeta[metric].color}}/> {metricMeta[metric].label}</span>
-                <span><CalendarDays size={13}/> {mode === 'live' ? `Database records (${period})` : 'Hourly samples'}</span>
+                <span><CalendarDays size={13}/> {mode === 'live' ? `Database records (${period})` : mode === 'manual' ? 'Simulated response' : 'Hourly samples'}</span>
               </div>
               {liveError && <p className="sensor-unavailable" style={{marginTop:8}}>Notice: {liveError}</p>}
             </section>
@@ -761,11 +835,11 @@ export default function App() {
               <div className="panel-heading">
                 <div>
                   <h2>Field conditions</h2>
-                  <p>{mode === 'live' ? `Latest reading for ${currentFarm(selectedFarmFilter)}` : 'Latest demo sensor snapshot'}</p>
+                  <p>{mode === 'live' ? `Latest reading for ${currentFarm(selectedFarmFilter)}` : mode === 'manual' ? 'Interactive manual input values' : 'Latest demo sensor snapshot'}</p>
                 </div>
                 <span className="live-tag">
-                  <span style={{background: mode === 'live' ? '#2ca459' : '#e0933e'}}/>
-                  {mode === 'live' ? 'LIVE STREAM' : 'SIMULATED'}
+                  <span style={{background: mode === 'live' ? '#2ca459' : mode === 'manual' ? '#0d9488' : '#e0933e'}}/>
+                  {mode === 'live' ? 'REAL SENSOR DATA' : mode === 'manual' ? 'MANUAL INPUT' : 'DEMONSTRATION ANALYSIS'}
                 </span>
               </div>
 
@@ -774,8 +848,8 @@ export default function App() {
                 <Condition
                   icon={Droplets}
                   label="Soil moisture"
-                  value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_moisture_pct !== null ? `${latestLiveReading.soil_moisture_pct.toFixed(1)}%` : 'Unavailable') : `${latestDemo.moisture}%`}
-                  sub={mode === 'live' ? (latestLiveReading?.modbus_valid ? 'Modbus 7-in-1' : 'Probe Error') : 'Volumetric estimate'}
+                  value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_moisture_pct !== null ? `${latestLiveReading.soil_moisture_pct.toFixed(1)}%` : 'Unavailable') : mode === 'manual' ? (manualReadings.soilMoisture != null ? `${manualReadings.soilMoisture.toFixed(1)}%` : 'Unavailable') : `${latestDemo.moisture}%`}
+                  sub={mode === 'live' ? (latestLiveReading?.modbus_valid ? 'Modbus 7-in-1' : 'Probe Error') : mode === 'manual' ? 'User-entered' : 'Volumetric estimate'}
                   color="green"
                 />
 
@@ -783,8 +857,8 @@ export default function App() {
                 <Condition
                   icon={Thermometer}
                   label="Air temperature"
-                  value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.air_temperature_c !== null ? `${latestLiveReading.air_temperature_c.toFixed(1)}°C` : 'Unavailable') : `${latestDemo.temperature}°C`}
-                  sub={mode === 'live' ? (latestLiveReading?.sht40_valid ? 'Sensirion SHT40' : 'SHT40 Error') : 'Ambient'}
+                  value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.air_temperature_c !== null ? `${latestLiveReading.air_temperature_c.toFixed(1)}°C` : 'Unavailable') : mode === 'manual' ? (manualReadings.airTemperature != null ? `${manualReadings.airTemperature.toFixed(1)}°C` : 'Unavailable') : `${latestDemo.temperature}°C`}
+                  sub={mode === 'live' ? (latestLiveReading?.sht40_valid ? 'Sensirion SHT40' : 'SHT40 Error') : mode === 'manual' ? 'User-entered' : 'Ambient'}
                   color="orange"
                 />
 
@@ -792,8 +866,8 @@ export default function App() {
                 <Condition
                   icon={Waves}
                   label="Relative humidity"
-                  value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.relative_humidity_pct !== null ? `${latestLiveReading.relative_humidity_pct.toFixed(1)}%` : 'Unavailable') : `${latestDemo.humidity}%`}
-                  sub={mode === 'live' ? (latestLiveReading?.sht40_valid ? 'Sensirion SHT40' : 'SHT40 Error') : 'Relative humidity'}
+                  value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.relative_humidity_pct !== null ? `${latestLiveReading.relative_humidity_pct.toFixed(1)}%` : 'Unavailable') : mode === 'manual' ? (manualReadings.relativeHumidity != null ? `${manualReadings.relativeHumidity.toFixed(0)}%` : 'Unavailable') : `${latestDemo.humidity}%`}
+                  sub={mode === 'live' ? (latestLiveReading?.sht40_valid ? 'Sensirion SHT40' : 'SHT40 Error') : mode === 'manual' ? 'User-entered' : 'Relative humidity'}
                   color="blue"
                 />
 
@@ -801,8 +875,8 @@ export default function App() {
                 <Condition
                   icon={Activity}
                   label="Soil pH"
-                  value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_ph !== null ? latestLiveReading.soil_ph.toFixed(2) : 'Unavailable') : latestDemo.ph.toFixed(1)}
-                  sub={mode === 'live' ? (latestLiveReading?.modbus_valid ? 'Modbus 7-in-1' : 'Probe Error') : 'Soil acidity'}
+                  value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_ph !== null ? latestLiveReading.soil_ph.toFixed(2) : 'Unavailable') : mode === 'manual' ? (manualReadings.soilPh != null ? manualReadings.soilPh.toFixed(2) : 'Unavailable') : latestDemo.ph.toFixed(1)}
+                  sub={mode === 'live' ? (latestLiveReading?.modbus_valid ? 'Modbus 7-in-1' : 'Probe Error') : mode === 'manual' ? 'User-entered' : 'Soil acidity'}
                   color="purple"
                 />
               </div>
@@ -874,12 +948,48 @@ export default function App() {
                 </div>
               )}
 
+              {/* Extended Manual Sensor Metrics (NPK, EC, Rain) */}
+              {mode === 'manual' && (
+                <div style={{marginTop: 14}}>
+                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8}}>
+                    <div className="rain-metric-box">
+                      <small>Electrical Cond. (EC)</small>
+                      <strong>{manualReadings.ec != null ? `${manualReadings.ec} µS/cm` : 'Unavailable'}</strong>
+                    </div>
+                    <div className="rain-metric-box">
+                      <small>Soil Temp (Manual)</small>
+                      <strong>{manualReadings.soilTemperature != null ? `${manualReadings.soilTemperature.toFixed(1)}°C` : 'Unavailable'}</strong>
+                    </div>
+                  </div>
+                  <div style={{background:'#fafbf9', border:'1px solid #f0f2ed', borderRadius:9, padding:'10px 12px', marginBottom:8}}>
+                    <div style={{fontSize:9, fontWeight:800, color:'#7a8b7c', textTransform:'uppercase', letterSpacing:'.6px'}}>
+                      Soil Nutrients (NPK — Manually Emulated)
+                    </div>
+                    <div className="npk-pills">
+                      <span className="npk-chip"><span>Nitrogen (N):</span><strong>{manualReadings.nitrogen ?? '-'} kg/ha</strong></span>
+                      <span className="npk-chip"><span>Phosphorus (P):</span><strong>{manualReadings.phosphorus ?? '-'} kg/ha</strong></span>
+                      <span className="npk-chip"><span>Potassium (K):</span><strong>{manualReadings.potassium ?? '-'} kg/ha</strong></span>
+                    </div>
+                  </div>
+                  <div className="rain-metrics">
+                    <div className="rain-metric-box">
+                      <small>Interval Rain</small>
+                      <strong>{(manualReadings.rainfall ?? 0).toFixed(2)} mm</strong>
+                    </div>
+                    <div className="rain-metric-box">
+                      <small>Rain Status</small>
+                      <strong>{(manualReadings.rainfall ?? 0) > 0 ? 'Active Rain' : 'Dry'}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {mode === 'demo' && (
                 <div className="weather-strip">
                   <CloudSun size={20}/>
                   <div>
-                    <strong>Weather integration not connected</strong>
-                    <small>Values above come from seeded demo readings.</small>
+                    <strong>Curated Demo Sensor Readings</strong>
+                    <small>Values are standardized for demonstration without live hardware.</small>
                   </div>
                 </div>
               )}
@@ -978,262 +1088,84 @@ export default function App() {
           </div>
         </section>}
 
-        {/* Crops View */}
-        {page === 'Crops' && <section>
-          <PageHeading
-            eyebrow="CROP MANAGEMENT"
-            title="Crops & growing cycles"
-            subtitle="Review crop stages, soil targets and farm assignments."
-            action={canEdit(user.role) && <button className="btn btn-primary" onClick={()=>openForm('crop')}><Plus size={16}/> Add crop</button>}
+        {/* Crop Analysis Workflow View */}
+        {page === 'Crop analysis' && (
+          <CropAnalysisWorkflow
+            farms={store.farms.map(f => ({ id: f.id, name: f.name, location: f.location, soil: f.soil }))}
+            activeMode={mode}
+            currentReadings={activeReadings}
+            initialCropId={selectedCropId}
+            onNavigateToCropDetail={(cropId) => {
+              setSelectedCropId(cropId);
+              changePage('Crop detail');
+            }}
+            sessionToken={sessionToken}
           />
-          <div className="toolbar">
-            <div className="searchbox"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search crops..."/></div>
-            <span className="result-count">{visibleCrops.length} crop records</span>
-          </div>
-          <div className="crop-grid">
-            {visibleCrops.filter(c=>(c.name+' '+c.stage+' '+currentFarm(c.farmId)).toLowerCase().includes(query.toLowerCase())).map(c => (
-              <article className="crop-card" key={c.id}>
-                <div className="crop-art"><span>{c.emoji}</span><span className="stage-tag">{c.stage}</span></div>
-                <div className="crop-card-body">
-                  <div className="crop-title"><div><h3>{c.name}</h3><p>{currentFarm(c.farmId)}</p></div><span className="crop-status-dot"/></div>
-                  <div className="target-row">
-                    <div><small>MOISTURE TARGET</small><strong>{c.moistureMin}–{c.moistureMax}%</strong></div>
-                    <div><small>SOIL pH</small><strong>{c.phMin}–{c.phMax}</strong></div>
-                  </div>
-                  <p className="crop-note">{c.note}</p>
-                  <div className="crop-actions">
-                    <button className="btn btn-light" onClick={()=>{setSelectedCropId(c.id);changePage('Crop detail')}}>View crop details <ChevronRight size={15}/></button>
-                    {canEdit(user.role) && <IconButton label="Edit crop" onClick={()=>openForm('crop',c.id)}><Pencil size={15}/></IconButton>}
-                  </div>
-                </div>
-              </article>
-            ))}
-            {visibleCrops.length===0 && <EmptyState text="No crop records available."/>}
-          </div>
-        </section>}
+        )}
+
+        {/* Crops Catalog View */}
+        {page === 'Crops' && (
+          <CropLibrary
+            onSelectCropForDetail={(cropId) => {
+              setSelectedCropId(cropId);
+              changePage('Crop detail');
+            }}
+            onSelectCropForAnalysis={(cropId) => {
+              setSelectedCropId(cropId);
+              changePage('Crop analysis');
+            }}
+          />
+        )}
 
         {/* Crop Detail View */}
-        {page === 'Crop detail' && currentCrop && <section>
-          <PageHeading
-            eyebrow="CROP DETAILS"
-            title={`${currentCrop.emoji} ${currentCrop.name}`}
-            subtitle={`${currentFarm(currentCrop.farmId)} · ${currentCrop.stage}`}
-            action={<button className="btn btn-light" onClick={()=>changePage('Crops')}>Back to crops</button>}
+        {page === 'Crop detail' && (
+          <CropDetailView
+            cropId={selectedCropId}
+            onBack={() => changePage('Crops')}
+            onLaunchAnalysis={(cropId) => {
+              setSelectedCropId(cropId);
+              changePage('Crop analysis');
+            }}
+            mode={mode}
+            manualReadings={manualReadings}
+            latestLiveReading={latestLiveReading}
+            liveHistory={liveHistory}
           />
-          <div className="detail-grid">
-            <div className="panel crop-detail-main">
-              <div className="crop-hero">
-                <div className="crop-hero-emoji">{currentCrop.emoji}</div>
-                <div>
-                  <span className="eyebrow">CURRENT GROWTH STAGE</span>
-                  <h2>{currentCrop.stage}</h2>
-                  <p>{currentCrop.note}</p>
-                </div>
-              </div>
-              <h3>Sensor readings</h3>
-              <div className="mini-stat-grid">
-                <Condition
-                  icon={Droplets}
-                  label="Soil moisture"
-                  value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_moisture_pct !== null ? `${latestLiveReading.soil_moisture_pct.toFixed(1)}%` : 'Unavailable') : `${latestDemo.moisture}%`}
-                  sub={`Target ${currentCrop.moistureMin}–${currentCrop.moistureMax}%`}
-                  color="green"
-                />
-                <Condition
-                  icon={Thermometer}
-                  label="Temperature"
-                  value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.air_temperature_c !== null ? `${latestLiveReading.air_temperature_c.toFixed(1)}°C` : 'Unavailable') : `${latestDemo.temperature}°C`}
-                  sub={mode === 'live' ? 'Sensirion SHT40' : 'Simulated'}
-                  color="orange"
-                />
-                <Condition
-                  icon={Activity}
-                  label="Soil pH"
-                  value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_ph !== null ? latestLiveReading.soil_ph.toFixed(2) : 'Unavailable') : latestDemo.ph.toFixed(1)}
-                  sub={`Target ${currentCrop.phMin}–${currentCrop.phMax}`}
-                  color="purple"
-                />
-              </div>
-              <h3 className="section-subhead">Moisture history</h3>
-              <LineChart
-                values={mode === 'live' && liveHistory.length > 0 ? liveHistory.map(r => r.modbus_valid && r.soil_moisture_pct !== null ? r.soil_moisture_pct : 0) : demoReadings.map(r=>r.moisture)}
-                labels={mode === 'live' && liveHistory.length > 0 ? liveHistory.map(r => new Date(r.recorded_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})) : demoReadings.map(r=>r.time)}
-                color="#2f8b57"
-                min={20}
-                max={80}
-              />
-              <p className="micro-note">
-                {mode === 'live' ? 'Showing real-time telemetry from SQLite database.' : 'Simulated sample values. Actual readings will be available after IoT integration.'}
-              </p>
-            </div>
-            <div className="panel">
-              <div className="panel-heading">
-                <div><h2>Crop requirements</h2><p>Configured thresholds</p></div>
-                <Leaf size={19} color="#2f8b57"/>
-              </div>
-              <div className="requirement">
-                <span>Soil moisture</span>
-                <strong>{currentCrop.moistureMin}–{currentCrop.moistureMax}%</strong>
-                <div className="range-track"><i style={{left:`${currentCrop.moistureMin}%`,width:`${currentCrop.moistureMax-currentCrop.moistureMin}%`}}/></div>
-              </div>
-              <div className="requirement">
-                <span>Soil pH range</span>
-                <strong>{currentCrop.phMin}–{currentCrop.phMax}</strong>
-                <div className="range-track"><i style={{left:`${currentCrop.phMin*10}%`,width:`${(currentCrop.phMax-currentCrop.phMin)*10}%`}}/></div>
-              </div>
-              <div className="recommendation-box">
-                <div className="recommendation-icon"><Sprout size={18}/></div>
-                <div>
-                  <strong>Status check</strong>
-                  <p>
-                    {mode === 'live' && latestLiveReading?.soil_moisture_pct !== null && latestLiveReading?.soil_moisture_pct !== undefined ? (
-                      latestLiveReading.soil_moisture_pct < currentCrop.moistureMin
-                        ? 'Soil moisture is below the configured range. Inspect irrigation.'
-                        : latestLiveReading.soil_moisture_pct > currentCrop.moistureMax
-                        ? 'Soil moisture is above the configured range. Check field drainage.'
-                        : 'Current moisture is within the healthy configured range.'
-                    ) : 'Regular monitoring active.'}
-                  </p>
-                </div>
-              </div>
-              {canEdit(user.role) && <button className="btn btn-primary full-width" onClick={()=>openForm('crop',currentCrop.id)}><Pencil size={15}/> Edit crop settings</button>}
-            </div>
-          </div>
-        </section>}
+        )}
+
+        {/* Maharashtra Seasonal Crop Calendar View */}
+        {page === 'Crop calendar' && (
+          <section>
+            <PageHeading
+              eyebrow="AGRO-CLIMATIC CALENDAR"
+              title="Maharashtra Seasonal Crop Calendar"
+              subtitle="Regional crop scheduling, sowing windows, critical stage interventions, and harvest periods based on MPKV Rahuri & ICAR guidelines."
+              action={
+                <button className="btn btn-primary" onClick={() => changePage('Crop analysis')}>
+                  <Sparkles size={16}/> Analyze a crop
+                </button>
+              }
+            />
+            <MaharashtraCropCalendar />
+          </section>
+        )}
 
         {/* Sensor Data View */}
-        {page === 'Sensor data' && <section>
-          <PageHeading
-            eyebrow="FIELD MONITORING"
-            title="Sensor data"
-            subtitle={mode === 'live' ? `Live telemetry stream for ${currentFarm(selectedFarmFilter)}.` : 'Explore historical readings by parameter. All values shown here are simulated demo data.'}
-          />
-          <div className="stat-grid">
-            <StatCard label="Soil moisture" value={soilMoistureDisplay} detail={mode === 'live' ? 'Live Modbus' : 'Latest sample'} icon={Droplets} tint="green"/>
-            <StatCard label="Air temperature" value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.air_temperature_c !== null ? `${latestLiveReading.air_temperature_c.toFixed(1)}°C` : 'Unavailable') : `${latestDemo.temperature}°C`} detail="SHT40 sensor" icon={Thermometer} tint="orange"/>
-            <StatCard label="Air humidity" value={mode === 'live' ? (latestLiveReading?.sht40_valid && latestLiveReading.relative_humidity_pct !== null ? `${latestLiveReading.relative_humidity_pct.toFixed(1)}%` : 'Unavailable') : `${latestDemo.humidity}%`} detail="SHT40 sensor" icon={Waves} tint="blue"/>
-            <StatCard label="Soil pH" value={mode === 'live' ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_ph !== null ? latestLiveReading.soil_ph.toFixed(2) : 'Unavailable') : latestDemo.ph.toFixed(1)} detail="Modbus sensor" icon={Activity} tint="purple"/>
-          </div>
-
-          <div className="panel sensor-page-panel">
-            <div className="panel-heading">
-              <div>
-                <h2>{mode === 'live' ? 'Live historical sensor readings' : 'Historical sensor readings'}</h2>
-                <p>Choose a metric and time range to inspect the sample series.</p>
-              </div>
-              <span className="live-tag">
-                <span style={{background: mode === 'live' ? '#2ca459' : '#e0933e'}}/>
-                {mode === 'live' ? 'LIVE DATA' : 'SIMULATED DATA'}
-              </span>
-            </div>
-
-            <div className="chart-controls sensor-controls">
-              <select aria-label="Farm selection" value={selectedFarmFilter} onChange={e => setSelectedFarmFilter(e.target.value)}>
-                {visibleFarms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-              <select aria-label="Sensor metric" value={metric} onChange={e => setMetric(e.target.value as typeof metric)}>
-                {Object.entries(metricMeta).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-              <select aria-label="Chart period" value={period} onChange={e => setPeriod(e.target.value)}>
-                <option value="1h">Last 1 hour</option>
-                <option value="6h">Last 6 hours</option>
-                <option value="24h">Last 24 hours</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-              </select>
-            </div>
-
-            <div className="chart-summary">
-              <div>
-                <span>{metricMeta[metric].label}</span>
-                <strong>{chartCurrentStr}</strong>
-              </div>
-              <span className="trend-chip">
-                <Activity size={14}/> {chartValuesToRender.length} sample points
-              </span>
-            </div>
-
-            {mode === 'live' && chartValuesToRender.length === 0 ? (
-              <div className="chart-state-msg">
-                <strong>No telemetry records found for this farm in this window</strong>
-                <span>New packets will automatically appear here once transmitted.</span>
-              </div>
-            ) : (
-              <LineChart
-                values={chartValuesToRender}
-                labels={chartLabelsToRender}
-                color={metricMeta[metric].color}
-                min={chartMin}
-                max={chartMax}
-              />
-            )}
-          </div>
-
-          <div className="panel sensor-reading-table">
-            <div className="panel-heading">
-              <div>
-                <h2>{mode === 'live' ? 'Ingested readings from SQLite' : 'Latest readings'}</h2>
-                <p>{mode === 'live' ? 'Authoritative values as received via HTTPS API.' : 'Timestamped values from the seeded sensor series.'}</p>
-              </div>
-              <button className="btn btn-light btn-sm" onClick={() => mode === 'live' ? fetchLiveTelemetry(true) : notify('Demo reading list refreshed')}>
-                <RefreshCw size={14} className={isFetchingLive ? 'animate-spin' : ''}/> Refresh view
-              </button>
-            </div>
-
-            {mode === 'live' ? (
-              <div>
-                <div className="table-head reading-row-live">
-                  <span>RECORDED AT</span>
-                  <span>AIR TEMP</span>
-                  <span>HUMIDITY</span>
-                  <span>SOIL MOIST</span>
-                  <span>SOIL TEMP</span>
-                  <span>SOIL pH</span>
-                  <span>EC (uS/cm)</span>
-                  <span>NPK (mg/kg)</span>
-                  <span>RAIN (mm)</span>
-                </div>
-                {liveHistory.slice(-12).reverse().map(r => {
-                  let rawJson: any = null;
-                  try { rawJson = r.raw_payload ? JSON.parse(r.raw_payload) : null; } catch { /* ignore */ }
-                  return (
-                    <div className="reading-row-live" key={r.id}>
-                      <span>{new Date(r.recorded_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
-                      <span>{r.sht40_valid && r.air_temperature_c !== null ? `${r.air_temperature_c.toFixed(1)}°C` : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.sht40_valid && r.relative_humidity_pct !== null ? `${r.relative_humidity_pct.toFixed(1)}%` : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.modbus_valid && r.soil_moisture_pct !== null ? `${r.soil_moisture_pct.toFixed(1)}%` : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.modbus_valid && r.soil_temperature_c !== null ? `${r.soil_temperature_c.toFixed(1)}°C` : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.modbus_valid && r.soil_ph !== null ? r.soil_ph.toFixed(2) : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.modbus_valid && rawJson?.modbus?.electrical_conductivity_us_cm !== undefined ? `${rawJson.modbus.electrical_conductivity_us_cm}` : r.modbus_valid && r.electrical_conductivity_ds_m !== null ? `${(r.electrical_conductivity_ds_m*1000).toFixed(0)}` : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.modbus_valid && rawJson?.modbus ? `${rawJson.modbus.nitrogen_mg_kg ?? '-'}/${rawJson.modbus.phosphorus_mg_kg ?? '-'}/${rawJson.modbus.potassium_mg_kg ?? '-'}` : <span className="sensor-unavailable">Err</span>}</span>
-                      <span>{r.rain_valid ? `${r.rain_accumulation_mm.toFixed(2)}` : '0.00'}</span>
-                    </div>
-                  );
-                })}
-                {liveHistory.length === 0 && <EmptyState text="No ingested telemetry readings recorded yet for this farm."/>}
-              </div>
-            ) : (
-              <div>
-                <div className="table-head reading-row">
-                  <span>TIME</span>
-                  <span>SOIL MOISTURE</span>
-                  <span>TEMPERATURE</span>
-                  <span>HUMIDITY</span>
-                  <span>SOIL pH</span>
-                </div>
-                {demoReadings.slice(-8).reverse().map((r,i) => (
-                  <div className="reading-row" key={r.time}>
-                    <span>{r.time} · {i===0?'Latest':'Earlier sample'}</span>
-                    <span>{r.moisture}%</span>
-                    <span>{r.temperature}°C</span>
-                    <span>{r.humidity}%</span>
-                    <span>{r.ph.toFixed(1)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>}
+        {page === 'Sensor data' && (
+          <section>
+            <ModernSensorDataView
+              mode={mode}
+              manualReadings={manualReadings}
+              onManualReadingChange={(key, val) => setManualReadings(prev => ({ ...prev, [key]: val }))}
+              latestLiveReading={latestLiveReading}
+              liveHistory={liveHistory}
+              farmName={currentFarm(selectedFarmFilter)}
+              plotName="Land L-01"
+              cropName="Wheat"
+              onNavigateToCropAnalysis={() => changePage('Crop analysis')}
+            />
+          </section>
+        )}
 
         {/* Alerts View */}
         {page === 'Alerts' && <section>
@@ -1610,10 +1542,228 @@ export default function App() {
   </div>
 }
 
-function Login({ users, onLogin }: { users: User[]; onLogin: (user:User)=>void }) {
-  const [selected,setSelected]=useState('u-pushkar')
-  const activeUsers=users.filter(u=>u.active)
-  return <div className="login-screen"><div className="login-left"><div className="login-brand"><div className="brand-mark"><Sprout size={25}/></div><div><strong>SmartFarm</strong><small>SMART PRECISION FARMING</small></div></div><div className="login-hero"><span className="hero-pill"><span/> SMART AGRICULTURE PLATFORM</span><h1>Farm smarter.<br/><em>Grow better.</em></h1><p>Bring your farm data together, understand field conditions and make more informed decisions.</p><div className="hero-metrics"><div><strong>24/7</strong><span>Monitoring concept</span></div><div><strong>IoT</strong><span>Ready architecture</span></div><div><strong>One view</strong><span>Farm insights</span></div></div></div><div className="login-landscape"><div className="sun"/><div className="hill hill-one"/><div className="hill hill-two"/><div className="field-lines"/></div><p className="login-footnote">A student project prototype · Sample data only</p></div><div className="login-right"><div className="login-form-wrap"><div className="login-mobile-brand"><div className="brand-mark"><Sprout size={22}/></div><strong>GreenField</strong></div><span className="eyebrow">WELCOME BACK</span><h2>Sign in to your workspace</h2><p className="login-sub">Choose a demo account to explore role-specific features.</p><div className="demo-accounts">{activeUsers.map(u=><button key={u.id} className={`account-option ${selected===u.id?'account-selected':''}`} onClick={()=>setSelected(u.id)}><span className={`avatar role-${u.role.toLowerCase()}`}>{u.initials||initials(u.name)}</span><span className="account-copy"><strong>{u.name}</strong><small>{roleLabels[u.role]}</small></span>{selected===u.id?<span className="radio-selected"><Check size={13}/></span>:<span className="radio-empty"/>}</button>)}</div><button className="btn btn-primary login-submit" onClick={()=>{const u=activeUsers.find(x=>x.id===selected);if(u)onLogin(u)}}>Continue as demo <ChevronRight size={17}/></button><div className="demo-disclaimer"><ShieldCheck size={16}/><span><strong>Demo access</strong><br/>Password SmartFarmPassword2026! automatically verified.</span></div><p className="login-legal">By continuing, you enter the SmartFarm environment.</p></div><div className="login-right-footer"><span>© 2026 GreenField</span><span><CircleHelp size={13}/> Help & support</span></div></div></div>
+interface LoginProps {
+  users: User[];
+  onLoginSuccess: (user: User, token: string | null) => void;
+  onDemoBypass: (user: User) => void;
+}
+
+function Login({ users, onLoginSuccess, onDemoBypass }: LoginProps) {
+  const [selected, setSelected] = useState<string>('u-pushkar');
+  const [password, setPassword] = useState<string>('SmartFarmPassword2026!');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [backendStatus, setBackendStatus] = useState<'online' | 'offline'>('online');
+
+  const activeUsers = users.filter(u => u.active);
+  const selectedUser = activeUsers.find(u => u.id === selected) || activeUsers[0];
+
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isSubmitting) return;
+
+    setError(null);
+    setIsSubmitting(true);
+
+    if (!selectedUser) {
+      setError('Please select a valid demo user account.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const email = `${selectedUser.id.replace('u-', '')}@smartfarm.demo`;
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (res.ok) {
+        const data = await res.json() as { token: string; user?: any };
+        onLoginSuccess(selectedUser, data.token);
+        return;
+      }
+
+      let errorMsg = 'Invalid email or password.';
+      try {
+        const errJson = await res.json() as { message?: string; error?: string };
+        errorMsg = errJson.message || errJson.error || errorMsg;
+      } catch { /* ignore */ }
+
+      setError(errorMsg);
+    } catch (networkErr: unknown) {
+      setBackendStatus('offline');
+      setError(`Cannot reach backend authentication service: ${(networkErr as Error).message}. You can still proceed in Offline Demo Mode for presentation.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-left">
+        <div className="login-brand">
+          <div className="brand-mark"><Sprout size={25}/></div>
+          <div><strong>SmartFarm</strong><small>SMART PRECISION FARMING</small></div>
+        </div>
+        <div className="login-hero">
+          <span className="hero-pill"><span/> SMART AGRICULTURE PLATFORM</span>
+          <h1>Farm smarter.<br/><em>Grow better.</em></h1>
+          <p>Bring your farm data together, understand field conditions and make more informed agronomic decisions with IoT telemetry and intelligent analysis.</p>
+          <div className="hero-metrics">
+            <div><strong>24/7</strong><span>Telemetry Ingestion</span></div>
+            <div><strong>30+</strong><span>Crop Profiles</span></div>
+            <div><strong>8-Aspect</strong><span>Agronomic Engine</span></div>
+          </div>
+        </div>
+        <div className="login-landscape">
+          <div className="sun"/>
+          <div className="hill hill-one"/>
+          <div className="hill hill-two"/>
+          <div className="field-lines"/>
+        </div>
+        <p className="login-footnote">Engineering Presentation Prototype · Academic IoT Project</p>
+      </div>
+
+      <div className="login-right">
+        <div className="login-form-wrap">
+          <div className="login-mobile-brand">
+            <div className="brand-mark"><Sprout size={22}/></div>
+            <strong>SmartFarm</strong>
+          </div>
+          <span className="eyebrow">WELCOME BACK</span>
+          <h2>Sign in to your workspace</h2>
+          <p className="login-sub">Select your account and authenticate to access your farm dashboard.</p>
+
+          <form onSubmit={handleLogin}>
+            <div className="demo-accounts" role="radiogroup" aria-label="Select role account">
+              {activeUsers.map(u => (
+                <button
+                  type="button"
+                  key={u.id}
+                  className={`account-option ${selected === u.id ? 'account-selected' : ''}`}
+                  onClick={() => { setSelected(u.id); setError(null); }}
+                  aria-checked={selected === u.id}
+                >
+                  <span className={`avatar role-${u.role.toLowerCase()}`}>{u.initials || initials(u.name)}</span>
+                  <span className="account-copy">
+                    <strong>{u.name}</strong>
+                    <small>{roleLabels[u.role]} · {u.description}</small>
+                  </span>
+                  {selected === u.id ? (
+                    <span className="radio-selected"><Check size={13}/></span>
+                  ) : (
+                    <span className="radio-empty"/>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Password Field */}
+            <div style={{ marginTop: 16 }}>
+              <label className="field">
+                <span>Account Password (Demo Verified)</span>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter account password"
+                    required
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: '#64748b', display: 'grid', placeItems: 'center' }}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={16}/> : <Eye size={16}/>}
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            {/* Error Notification Banner */}
+            {error && (
+              <div
+                role="alert"
+                style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#991b1b',
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  marginTop: 14
+                }}
+              >
+                <AlertTriangle size={17} style={{ flex: 'none', marginTop: 1, color: '#dc2626' }} />
+                <div>
+                  <strong style={{ display: 'block', fontSize: 12.5, color: '#991b1b' }}>Authentication Error</strong>
+                  <p style={{ margin: '3px 0 0', fontSize: 11.5, lineHeight: 1.4, color: '#b91c1c' }}>{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Offline Presentation Fallback */}
+            {backendStatus === 'offline' && (
+              <div style={{ marginTop: 12, padding: '12px 14px', background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 8 }}>
+                <strong style={{ fontSize: 12, color: '#92400e', display: 'block', marginBottom: 4 }}>Presentation Offline Access</strong>
+                <p style={{ fontSize: 11, color: '#b45309', margin: '0 0 10px', lineHeight: 1.4 }}>
+                  Backend server connection is currently unavailable. You can proceed with standard simulation mode to demonstrate your crop analysis and dashboard without live hardware.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm full-width"
+                  onClick={() => selectedUser && onDemoBypass(selectedUser)}
+                  style={{ borderColor: '#f59e0b', color: '#92400e', fontWeight: 800, background: '#fff' }}
+                >
+                  Enter in Offline Demo Mode (Presentation Safe)
+                </button>
+              </div>
+            )}
+
+            {/* Primary Submit Button */}
+            <button
+              type="submit"
+              className="btn btn-primary login-submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <RefreshCw size={15} className="animate-spin" /> Verifying Credentials...
+                </>
+              ) : (
+                <>
+                  Sign in as {selectedUser?.name ? selectedUser.name.split(' ')[0] : 'User'} <ChevronRight size={17}/>
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="demo-disclaimer" style={{ marginTop: 16 }}>
+            <ShieldCheck size={16} style={{ flex: 'none' }}/>
+            <span>
+              <strong>Verified Role Session:</strong> Server issues signed HMAC-SHA256 tokens and enforces role-based access control.
+            </span>
+          </div>
+          <p className="login-legal">By continuing, you enter the SmartFarm precision agriculture workspace.</p>
+        </div>
+
+        <div className="login-right-footer">
+          <span>© 2026 SmartFarm · Precision Farming</span>
+          <span><CircleHelp size={13}/> Demo Guide Ready</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PageHeading({ eyebrow,title,subtitle,action }: {eyebrow:string;title:string;subtitle:string;action?:ReactNode}) {
