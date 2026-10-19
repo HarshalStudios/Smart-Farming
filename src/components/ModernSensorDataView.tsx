@@ -3,7 +3,7 @@ import {
   Droplets, Thermometer, Waves, Activity, Radio, Sprout,
   ArrowDown, ArrowUp, Calendar, Download, RefreshCw, Check,
   AlertTriangle, Info, Sparkles, SlidersHorizontal, CloudRain,
-  Wind, Gauge, Leaf, Sun
+  Wind, Gauge, Leaf, Sun, type LucideIcon
 } from 'lucide-react';
 import type { SoilAndEnvReadings } from '../services/cropAnalysisEngine';
 
@@ -30,7 +30,7 @@ interface MetricCardConfig {
   max: number;
   safeMin: number;
   safeMax: number;
-  icon: React.ComponentType<{ size?: number; className?: string; color?: string }>;
+  icon: LucideIcon;
   optional?: boolean;
 }
 

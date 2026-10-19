@@ -80,10 +80,6 @@ export default function CropDetailView({
         </div>
       ) : (
         <>
-          <Sparkles size={15}/> Analyze This Crop in Workflow <ChevronRight size={14}/>
-        </button>
-      </div>
-
       {/* Hero Banner */}
       <div className="crop-hero-banner">
         <div className="crop-hero-left">
