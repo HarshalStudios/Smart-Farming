@@ -17,7 +17,7 @@ router.post('/login', async (req, res: Response) => {
   try {
     const db = getDb();
     const user = await db.queryOne<DbUser>(
-      'SELECT * FROM users WHERE email = $1 AND (active = TRUE OR active = 1)',
+      'SELECT * FROM users WHERE email = $1 AND active IS TRUE',
       [email.trim().toLowerCase()]
     );
 
@@ -91,7 +91,7 @@ router.get('/demo-accounts', async (req, res) => {
   try {
     const db = getDb();
     const result = await db.query<DbUser>(
-      'SELECT id, email, name, role, description, farm_ids FROM users WHERE (active = TRUE OR active = 1) ORDER BY id ASC'
+      'SELECT id, email, name, role, description, farm_ids FROM users WHERE active IS TRUE ORDER BY id ASC'
     );
     res.json({
       demoAccounts: result.rows.map(u => ({

@@ -441,8 +441,17 @@ void renderOledDisplay() {
 // ==============================================================================
 void uploadTelemetry() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println(F("[UPLOAD] Skipping upload: Wi-Fi offline. Reconnecting..."));
+    Serial.println(F("[Cloud] Skipping upload: Wi-Fi offline. Reconnecting..."));
     connectWiFi();
+    return;
+  }
+
+  // Verify device token is configured and not the default placeholder
+  if (strlen(DEVICE_TOKEN) == 0 ||
+      strcmp(DEVICE_TOKEN, "gfd_paste_your_revocable_device_token_here") == 0 ||
+      strncmp(DEVICE_TOKEN, "gfd_paste", 9) == 0) {
+    Serial.println(F("[Cloud] Device token not configured; upload disabled."));
+    Serial.println(F("[Cloud] Please obtain a token from the Admin panel (Devices -> Rotate Token) and update config.h."));
     return;
   }
 
@@ -547,7 +556,9 @@ void uploadTelemetry() {
     currentReadings.freeHeapBytes
   );
 
-  Serial.println(F("[UPLOAD] Transmitting telemetry payload to backend..."));
+  Serial.printf("[Cloud] Uploading telemetry to %s (Device: %s, TLS: %s)...\n",
+    API_HOST, DEVICE_ID, USE_HTTPS ? "Enabled" : "Disabled");
+  Serial.println(F("[Cloud] Serial payload inspection:"));
   Serial.println(jsonBuffer);
 
   // 4. HTTP / HTTPS Transmission
@@ -555,12 +566,10 @@ void uploadTelemetry() {
   String portSuffix = (API_PORT == 80 || API_PORT == 443) ? "" : (":" + String(API_PORT));
   String url = String(USE_HTTPS ? "https://" : "http://") + API_HOST + portSuffix + API_INGEST_PATH;
 
-  Serial.printf("[UPLOAD] Target endpoint: %s\n", url.c_str());
-
   if (USE_HTTPS) {
 #if USE_HTTPS
     WiFiClientSecure secureClient;
-    secureClient.setCACert(ROOT_CA_CERT); // Full TLS Root CA verification
+    secureClient.setCACert(ROOT_CA_CERT); // Full TLS Root CA verification (GlobalSign / GTS Root)
     http.begin(secureClient, url);
 #endif
   } else {
@@ -577,23 +586,30 @@ void uploadTelemetry() {
 
   if (httpCode >= 200 && httpCode < 300) {
     String response = http.getString();
-    Serial.printf("[UPLOAD] Ingestion Succeeded! HTTP %d\n[UPLOAD] Backend Response: %s\n", httpCode, response.c_str());
+    Serial.printf("[Cloud] Ingestion Succeeded! HTTP %d. Record saved in database.\n", httpCode);
+    Serial.printf("[Cloud] Backend Response: %s\n", response.c_str());
     strncpy(lastUploadTimeStr, isoTimestamp + 11, 8); // Extract HH:MM:SS
     lastUploadTimeStr[8] = '\0';
   } else {
     String errDetail = httpCode > 0 ? http.getString() : http.errorToString(httpCode);
-    Serial.printf("[UPLOAD] Ingestion FAILED! HTTP %d: %s\n", httpCode, errDetail.c_str());
+    Serial.printf("[Cloud] Ingestion FAILED! HTTP %d: %s\n", httpCode, errDetail.c_str());
 
-    // Specific actionable diagnostics
+    // Specific actionable diagnostics (NEVER printing sensitive credentials)
     if (httpCode == 401) {
-      Serial.println(F("[UPLOAD DIAGNOSTIC] 401 Unauthorized: The X-Device-Token was rejected. Obtain a valid token via POST /api/devices or POST /api/devices/:id/rotate-token and update config.h."));
+      Serial.println(F("[Cloud Auth Error] 401 Unauthorized: The X-Device-Token was rejected or revoked. Go to the Admin web panel -> Devices -> Rotate Token to issue a new token, then update config.h."));
     } else if (httpCode == 403) {
-      Serial.println(F("[UPLOAD DIAGNOSTIC] 403 Forbidden: The token does not match the DEVICE_ID, or the device is not associated with an authorized farm."));
+      Serial.println(F("[Cloud Auth Error] 403 Forbidden: The token does not match DEVICE_ID or the device is not associated with an authorized farm."));
     } else if (httpCode == 400) {
-      Serial.printf("[UPLOAD DIAGNOSTIC] 400 Bad Request: Contract validation failed on payload fields: %s\n", errDetail.c_str());
+      Serial.printf("[Cloud Payload Error] 400 Bad Request: Ingestion contract validation failed: %s\n", errDetail.c_str());
+    } else if (httpCode == 500) {
+      Serial.printf("[Cloud Server Error] 500 Internal Server / Database Error: %s\n", errDetail.c_str());
     } else if (httpCode < 0) {
-      Serial.printf("[UPLOAD DIAGNOSTIC] Network connection failed (%s). Check Wi-Fi RSSI (%d dBm), API_HOST (%s), and port (%d).\n",
-        errDetail.c_str(), currentReadings.wifiRssi, API_HOST, API_PORT);
+      Serial.printf("[Cloud Network/TLS Failure] Connection failed (Error code %d: %s).\n", httpCode, errDetail.c_str());
+      Serial.printf("[Cloud Network/TLS Failure] Diagnostics -> WiFi RSSI: %d dBm, Host: %s, Port: %d, HTTPS: %s.\n",
+        currentReadings.wifiRssi, API_HOST, API_PORT, USE_HTTPS ? "Enabled" : "Disabled");
+      if (USE_HTTPS) {
+        Serial.println(F("[Cloud Network/TLS Failure] HTTPS handshake failed. Verify: 1) NTP clock is synced, 2) ROOT_CA_CERT in config.h matches production CA (GlobalSign/Google Trust Services), 3) Outgoing TCP port 443 is unblocked."));
+      }
     }
 
     snprintf(lastUploadTimeStr, sizeof(lastUploadTimeStr), "Err:%d", httpCode);

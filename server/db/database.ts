@@ -272,8 +272,8 @@ class SqliteDatabaseAdapter implements DatabaseClient {
       cleanSql = cleanSql.replace(/\breturning\s+id\b/gi, '').trim();
     }
 
-    // Replace $1, $2, ... placeholders with ?
-    cleanSql = cleanSql.replace(/\$\d+/g, '?');
+    // Replace $1, $2, ... placeholders with ?1, ?2, ...
+    cleanSql = cleanSql.replace(/\$(\d+)/g, '?$1');
 
     return { sql: cleanSql, hasReturningId };
   }
@@ -287,7 +287,7 @@ class SqliteDatabaseAdapter implements DatabaseClient {
       return p;
     });
 
-    const isSelect = /^\s*SELECT\b/i.test(transformedSql);
+    const isSelect = /^\s*(SELECT|PRAGMA|EXPLAIN)\b/i.test(transformedSql);
 
     if (isSelect) {
       const stmt = this.db.prepare(transformedSql);
@@ -394,6 +394,23 @@ async function initializePostgresSchema(db: DatabaseClient): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_telemetry_device_time ON telemetry_readings(device_id, recorded_at DESC);
     CREATE INDEX IF NOT EXISTS idx_telemetry_farm_time ON telemetry_readings(farm_id, recorded_at DESC);
+
+    CREATE TABLE IF NOT EXISTS crop_analyses (
+      id BIGSERIAL PRIMARY KEY,
+      analysis_id VARCHAR(64) UNIQUE NOT NULL,
+      farm_id VARCHAR(64) NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+      crop_id VARCHAR(64) NOT NULL,
+      crop_name VARCHAR(128) NOT NULL,
+      growth_stage VARCHAR(128) NOT NULL,
+      health_score INTEGER NOT NULL,
+      health_rating VARCHAR(64) NOT NULL,
+      data_source VARCHAR(32) NOT NULL,
+      readings_json TEXT NOT NULL,
+      results_json TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_crop_analyses_farm_time ON crop_analyses(farm_id, created_at DESC);
   `);
 }
 
@@ -468,6 +485,24 @@ async function initializeSqliteSchema(db: DatabaseClient): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_telemetry_device_time ON telemetry_readings(device_id, recorded_at DESC);
     CREATE INDEX IF NOT EXISTS idx_telemetry_farm_time ON telemetry_readings(farm_id, recorded_at DESC);
+
+    CREATE TABLE IF NOT EXISTS crop_analyses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      analysis_id TEXT UNIQUE NOT NULL,
+      farm_id TEXT NOT NULL,
+      crop_id TEXT NOT NULL,
+      crop_name TEXT NOT NULL,
+      growth_stage TEXT NOT NULL,
+      health_score INTEGER NOT NULL,
+      health_rating TEXT NOT NULL,
+      data_source TEXT NOT NULL,
+      readings_json TEXT NOT NULL,
+      results_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (farm_id) REFERENCES farms(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_crop_analyses_farm_time ON crop_analyses(farm_id, created_at DESC);
   `);
 }
 
@@ -548,18 +583,22 @@ export async function initDatabase(customDbPath?: string): Promise<DatabaseClien
   const databaseUrl = rawUrl ? sanitizeDatabaseUrl(rawUrl) : undefined;
 
   if (databaseUrl) {
-    console.log('[Database] DATABASE_URL detected for production environment');
-    console.log(`[Database] Target: ${maskConnectionString(databaseUrl)}`);
-    console.log('[Database] Connecting to PostgreSQL 17 database...');
-    const adapter = new PostgresDatabaseAdapter(databaseUrl);
-    await initializePostgresSchema(adapter);
-    await seedBaselineData(adapter);
-    dbInstance = adapter;
-    return adapter;
+    try {
+      console.log('[Database] DATABASE_URL detected for production environment');
+      console.log(`[Database] Target: ${maskConnectionString(databaseUrl)}`);
+      console.log('[Database] Connecting to PostgreSQL 17 database...');
+      const adapter = new PostgresDatabaseAdapter(databaseUrl);
+      await initializePostgresSchema(adapter);
+      await seedBaselineData(adapter);
+      dbInstance = adapter;
+      return adapter;
+    } catch (err: unknown) {
+      console.warn(`[Database] Failed to initialize PostgreSQL: ${(err as Error).message}. Falling back to SQLite local storage.`);
+    }
   }
 
   // Local development / testing mode with SQLite
-  console.log('[Database] No DATABASE_URL configured; initializing SQLite for local development');
+  console.log('[Database] No DATABASE_URL configured or PostgreSQL unreachable; initializing SQLite fallback');
   const adapter = new SqliteDatabaseAdapter(customDbPath);
   await initializeSqliteSchema(adapter);
   await seedBaselineData(adapter);
@@ -571,18 +610,22 @@ export function getDb(): DatabaseClient {
   if (!dbInstance) {
     const rawUrl = process.env.DATABASE_URL?.trim();
     if (rawUrl) {
-      const databaseUrl = sanitizeDatabaseUrl(rawUrl);
-      console.log('[Database] getDb() called before initDatabase(); initializing PostgreSQL singleton');
-      const adapter = new PostgresDatabaseAdapter(databaseUrl);
-      // Non-blocking schema initialization if accessed before explicit initDatabase()
-      initializePostgresSchema(adapter).then(() => seedBaselineData(adapter)).catch(err => {
-        console.error('[Database] Failed to initialize default PostgreSQL schema:', err.message);
-      });
-      dbInstance = adapter;
-      return adapter;
+      try {
+        const databaseUrl = sanitizeDatabaseUrl(rawUrl);
+        console.log('[Database] getDb() called before initDatabase(); initializing PostgreSQL singleton');
+        const adapter = new PostgresDatabaseAdapter(databaseUrl);
+        // Non-blocking schema initialization if accessed before explicit initDatabase()
+        initializePostgresSchema(adapter).then(() => seedBaselineData(adapter)).catch(err => {
+          console.error('[Database] Failed to initialize default PostgreSQL schema:', err.message);
+        });
+        dbInstance = adapter;
+        return adapter;
+      } catch (err: unknown) {
+        console.warn(`[Database] PostgreSQL initialization in getDb failed: ${(err as Error).message}. Falling back to SQLite.`);
+      }
     }
 
-    // Local development SQLite fallback only when DATABASE_URL is NOT configured
+    // Local development SQLite fallback only when DATABASE_URL is NOT configured or fails
     const adapter = new SqliteDatabaseAdapter();
     initializeSqliteSchema(adapter).then(() => seedBaselineData(adapter)).catch(err => {
       console.error('[Database] Failed to initialize default SQLite schema:', err.message);

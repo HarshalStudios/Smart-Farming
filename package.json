@@ -10,10 +10,11 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "tsc -b",
-    "test": "tsx server/tests/postgresCompatibilityTest.ts && tsx server/tests/phase2Test.ts && tsx server/tests/phase3FirmwareTest.ts && tsx server/tests/phase4LiveIntegrationTest.ts",
+    "test": "tsx server/tests/postgresCompatibilityTest.ts && tsx server/tests/phase2Test.ts && tsx server/tests/phase3FirmwareTest.ts && tsx server/tests/phase4LiveIntegrationTest.ts && tsx server/tests/databaseExplorerAndLoginTest.ts",
     "test:postgres": "tsx server/tests/postgresCompatibilityTest.ts",
     "test:firmware": "tsx server/tests/phase3FirmwareTest.ts",
-    "test:phase4": "tsx server/tests/phase4LiveIntegrationTest.ts"
+    "test:phase4": "tsx server/tests/phase4LiveIntegrationTest.ts",
+    "test:db-explorer": "tsx server/tests/databaseExplorerAndLoginTest.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -23,6 +24,7 @@
     "pg": "^8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tsx": "^4.23.15",
     "typescript": "~5.7.2",
     "vite": "^6.1.0"
   },
@@ -32,7 +34,6 @@
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "tsx": "^4.23.15"
+    "@types/react-dom": "^18.3.5"
   }
 }

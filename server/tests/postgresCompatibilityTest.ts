@@ -43,6 +43,18 @@ async function runPostgresCompatibilityTests() {
       [testEmail, 'Admin']
     );
     assert(activeAdmin?.id === 'u-admin', 'Multi-parameter ($1, $2) query resolves correctly');
+
+    // Test PostgreSQL boolean compatibility for login (verifying no "operator does not exist: boolean = integer")
+    const loginUser = await db.queryOne<{ id: string; email: string; role: string }>(
+      'SELECT id, email, role FROM users WHERE email = $1 AND active IS TRUE',
+      [testEmail]
+    );
+    assert(loginUser?.email === testEmail, 'Login query with "active IS TRUE" succeeds without boolean = integer error');
+
+    const demoUsers = await db.query<{ id: string }>(
+      'SELECT id, email, name, role, description, farm_ids FROM users WHERE active IS TRUE ORDER BY id ASC'
+    );
+    assert(demoUsers.rows.length >= 5, 'Demo accounts query with "active IS TRUE" succeeds without boolean = integer error');
   } catch (err: unknown) {
     assert(false, 'Adapter interface error', (err as Error).message);
   }

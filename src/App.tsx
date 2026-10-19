@@ -5,8 +5,17 @@ import {
   CircleHelp, CloudSun, Cpu, Download, Droplets, Filter, LayoutDashboard, Leaf,
   LogOut, Menu, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Sprout,
   Thermometer, Tractor, TrendingUp, Users, Waves, X, MapPin, Pencil, Trash2,
-  RefreshCw, CalendarDays, CircleUserRound, SlidersHorizontal, Wrench, Radio
+  RefreshCw, CalendarDays, CircleUserRound, SlidersHorizontal, Wrench, Radio,
+  Database, Key, Copy, Table, Eye, ArrowUpDown, Server, GraduationCap, Sparkles
 } from 'lucide-react'
+import DatabaseExplorer from './components/DatabaseExplorer'
+import CropAnalysisWorkflow from './components/CropAnalysisWorkflow'
+import CropLibrary from './components/CropLibrary'
+import CropDetailView from './components/CropDetailView'
+import ManualModeControls from './components/ManualModeControls'
+import ProfessorDemoGuideModal from './components/ProfessorDemoGuideModal'
+import { CROPS_CATALOG } from './data/cropsData'
+import type { SoilAndEnvReadings } from './services/cropAnalysisEngine'
 
 type Role = 'Admin' | 'Farmer' | 'Partner' | 'Technician'
 type User = { id: string; name: string; role: Role; description: string; farmIds: string[]; active: boolean; initials: string }
@@ -15,7 +24,7 @@ type Crop = { id: string; name: string; emoji: string; stage: string; farmId: st
 type Device = { id: string; name: string; farmId: string; kind: string; status: 'Online' | 'Offline' | 'Needs attention' | 'Maintenance'; battery: number; lastSeen: string; notes: string }
 type AlertItem = { id: string; title: string; message: string; severity: 'Critical' | 'Warning' | 'Info'; status: 'Active' | 'Acknowledged' | 'Resolved'; farmId: string; time: string; action: string }
 type Reading = { time: string; moisture: number; temperature: number; humidity: number; ph: number }
-type Page = 'Dashboard' | 'Crops' | 'Crop detail' | 'Sensor data' | 'Alerts' | 'Alert patterns' | 'Farms & lands' | 'Devices' | 'Users' | 'Profile' | 'Settings' | 'Help & support'
+type Page = 'Dashboard' | 'Crop analysis' | 'Crops' | 'Crop detail' | 'Sensor data' | 'Alerts' | 'Alert patterns' | 'Farms & lands' | 'Devices' | 'Users' | 'Profile' | 'Settings' | 'Help & support' | 'Database explorer'
 
 export interface DbTelemetryReading {
   id: number;
@@ -121,11 +130,13 @@ function loadData(): Store {
 
 const navItems: { page: Page; icon: typeof LayoutDashboard; roles: Role[] }[] = [
   { page: 'Dashboard', icon: LayoutDashboard, roles: ['Admin','Farmer','Partner','Technician'] },
-  { page: 'Farms & lands', icon: Tractor, roles: ['Admin','Farmer','Partner'] },
+  { page: 'Crop analysis', icon: Sparkles, roles: ['Admin','Farmer','Partner','Technician'] },
   { page: 'Crops', icon: Sprout, roles: ['Admin','Farmer','Partner'] },
+  { page: 'Farms & lands', icon: Tractor, roles: ['Admin','Farmer','Partner'] },
   { page: 'Alerts', icon: Bell, roles: ['Admin','Farmer','Partner','Technician'] },
   { page: 'Alert patterns', icon: SlidersHorizontal, roles: ['Admin'] },
   { page: 'Devices', icon: Cpu, roles: ['Admin','Farmer','Technician'] },
+  { page: 'Database explorer', icon: Database, roles: ['Admin'] },
   { page: 'Users', icon: Users, roles: ['Admin'] },
 ]
 
@@ -164,10 +175,23 @@ function Field({ label, children }: { label: string; children: ReactNode }) { re
 export default function App() {
   const [store, setStore] = useState<Store>(loadData)
   const [userId, setUserId] = useState<string | null>(() => localStorage.getItem(SESSION))
-  const [mode, setMode] = useState<'demo' | 'live'>(() => (localStorage.getItem(MODE_KEY) as 'demo' | 'live') || 'demo')
+  const [mode, setMode] = useState<'demo' | 'live' | 'manual'>(() => (localStorage.getItem(MODE_KEY) as 'demo' | 'live' | 'manual') || 'demo')
+  const [manualReadings, setManualReadings] = useState<SoilAndEnvReadings>({
+    airTemperature: 26.5,
+    relativeHumidity: 62.0,
+    soilMoisture: 48.0,
+    soilTemperature: 24.5,
+    soilPh: 6.5,
+    ec: 650,
+    nitrogen: 125,
+    phosphorus: 65,
+    potassium: 115,
+    rainfall: 0.0
+  })
+  const [showGuideModal, setShowGuideModal] = useState<boolean>(false)
   const [sessionToken, setSessionToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
   const [page, setPage] = useState<Page>('Dashboard')
-  const [selectedCropId, setSelectedCropId] = useState('c1')
+  const [selectedCropId, setSelectedCropId] = useState('crop-tomato')
   const [selectedFarmFilter, setSelectedFarmFilter] = useState<string>('f1')
   const [query, setQuery] = useState('')
   const [toast, setToast] = useState('')
@@ -188,6 +212,8 @@ export default function App() {
   const [liveError, setLiveError] = useState<string | null>(null)
   const [lastLivePoll, setLastLivePoll] = useState<Date | null>(null)
   const [dbEngine, setDbEngine] = useState<string>('PostgreSQL 17 / SQLite')
+  const [tokenModal, setTokenModal] = useState<{ deviceId: string; token: string } | null>(null)
+  const [tokenCopied, setTokenCopied] = useState(false)
   const pollingRef = useRef<number | null>(null)
 
   const user = store.users.find(u => u.id === userId && u.active) ?? null
@@ -334,6 +360,33 @@ export default function App() {
     }
   }, [mode, fetchLiveTelemetry]);
 
+  const handleRotateToken = async (deviceId: string) => {
+    let token = sessionToken;
+    if (!token && user) {
+      token = await authenticateUserSession(user);
+    }
+    if (!token) {
+      setToast('Administrator authentication required to rotate device token.');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}/rotate-token`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json() as { newDeviceToken: string };
+        setTokenModal({ deviceId, token: data.newDeviceToken });
+        setToast(`Device token successfully rotated for ${deviceId}`);
+      } else {
+        const err = await res.json() as { message?: string };
+        setToast(err.message || 'Failed to rotate device token');
+      }
+    } catch (e: unknown) {
+      setToast(`Network error: ${(e as Error).message}`);
+    }
+  };
+
   const currentFarm = (id: string) => store.farms.find(f => f.id === id)?.name ?? 'Unknown farm'
   const currentCrop = store.crops.find(c => c.id === selectedCropId) ?? visibleCrops[0]
   const notify = (message: string) => setToast(message)
@@ -426,8 +479,21 @@ export default function App() {
     rainfall: { label: 'Rainfall (interval)', unit: 'mm', color: '#387ba3', icon: CloudSun }
   }
 
+  const manualChartValues = useMemo(() => {
+    const base = metric === 'moisture' ? manualReadings.soilMoisture :
+                 metric === 'temperature' ? manualReadings.airTemperature :
+                 metric === 'humidity' ? manualReadings.relativeHumidity :
+                 metric === 'ph' ? manualReadings.soilPh :
+                 metric === 'ec' ? manualReadings.ec :
+                 manualReadings.rainfall ?? 0;
+    return demoReadings.map((_, i) => {
+      const variation = Math.sin(i * 0.4) * (base * 0.05);
+      return Number((base + variation).toFixed(1));
+    });
+  }, [metric, manualReadings, demoReadings]);
+
   // Active chart numbers & bounds
-  const chartValuesToRender = mode === 'live' ? validLiveNumbers : demoChartValues.map(r => r[metric as 'moisture'|'temperature'|'humidity'|'ph'] || 0);
+  const chartValuesToRender = mode === 'live' ? validLiveNumbers : mode === 'manual' ? manualChartValues : demoChartValues.map(r => r[metric as 'moisture'|'temperature'|'humidity'|'ph'] || 0);
   const chartLabelsToRender = mode === 'live' ? liveChartLabels : demoChartValues.map(r => r.time);
   const chartMin = chartValuesToRender.length > 0 ? Math.min(...chartValuesToRender) - 2 : 0;
   const chartMax = chartValuesToRender.length > 0 ? Math.max(...chartValuesToRender) + 2 : 100;
@@ -437,12 +503,46 @@ export default function App() {
   const latestLiveVal = latestLiveReading ? getMetricValue(latestLiveReading, metric) : null;
   const chartCurrentStr = mode === 'live'
     ? (latestLiveVal !== null ? `${latestLiveVal}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}` : 'Unavailable')
+    : mode === 'manual'
+    ? `${metric === 'moisture' ? manualReadings.soilMoisture.toFixed(1) : metric === 'temperature' ? manualReadings.airTemperature.toFixed(1) : metric === 'humidity' ? manualReadings.relativeHumidity.toFixed(0) : metric === 'ph' ? manualReadings.soilPh.toFixed(2) : metric === 'ec' ? manualReadings.ec : (manualReadings.rainfall ?? 0).toFixed(1)}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}`
     : `${latestDemo[metric as 'moisture'|'temperature'|'humidity'|'ph'] || 0}${metricMeta[metric].unit === 'pH' ? '' : metricMeta[metric].unit}`;
 
   // Soil moisture for card
   const soilMoistureDisplay = mode === 'live'
     ? (latestLiveReading?.modbus_valid && latestLiveReading.soil_moisture_pct !== null ? `${latestLiveReading.soil_moisture_pct.toFixed(1)}%` : 'Unavailable')
+    : mode === 'manual'
+    ? `${manualReadings.soilMoisture.toFixed(1)}%`
     : `${latestDemo.moisture}%`;
+
+  const activeReadings: SoilAndEnvReadings = useMemo(() => {
+    if (mode === 'manual') return manualReadings;
+    if (mode === 'live' && latestLiveReading) {
+      return {
+        airTemperature: latestLiveReading.sht40_valid && latestLiveReading.air_temperature_c !== null ? latestLiveReading.air_temperature_c : 27.5,
+        relativeHumidity: latestLiveReading.sht40_valid && latestLiveReading.relative_humidity_pct !== null ? latestLiveReading.relative_humidity_pct : 62.0,
+        soilMoisture: latestLiveReading.modbus_valid && latestLiveReading.soil_moisture_pct !== null ? latestLiveReading.soil_moisture_pct : 48.0,
+        soilTemperature: latestLiveReading.modbus_valid && latestLiveReading.soil_temperature_c !== null ? latestLiveReading.soil_temperature_c : 25.0,
+        soilPh: latestLiveReading.modbus_valid && latestLiveReading.soil_ph !== null ? latestLiveReading.soil_ph : 6.5,
+        ec: latestLiveReading.modbus_valid && latestLiveReading.electrical_conductivity_ds_m !== null ? Math.round(latestLiveReading.electrical_conductivity_ds_m * 1000) : 650,
+        nitrogen: latestLiveReading.modbus_valid && latestLiveReading.nitrogen_kg_ha !== null ? latestLiveReading.nitrogen_kg_ha : 115,
+        phosphorus: latestLiveReading.modbus_valid && latestLiveReading.phosphorus_kg_ha !== null ? latestLiveReading.phosphorus_kg_ha : 55,
+        potassium: latestLiveReading.modbus_valid && latestLiveReading.potassium_kg_ha !== null ? latestLiveReading.potassium_kg_ha : 110,
+        rainfall: latestLiveReading.rain_valid ? latestLiveReading.rain_accumulation_mm : 0
+      };
+    }
+    return {
+      airTemperature: latestDemo.temperature,
+      relativeHumidity: latestDemo.humidity,
+      soilMoisture: latestDemo.moisture,
+      soilTemperature: 25.0,
+      soilPh: latestDemo.ph,
+      ec: 650,
+      nitrogen: 125,
+      phosphorus: 65,
+      potassium: 115,
+      rainfall: 0
+    };
+  }, [mode, manualReadings, latestLiveReading, latestDemo]);
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
@@ -502,6 +602,7 @@ export default function App() {
 
         <div className="top-actions">
           {/* Mode Switcher Pill */}
+          {/* Three Operating Modes Selector */}
           <div className="mode-toggle-group" role="radiogroup" aria-label="Environment mode selector">
             <button
               className={`mode-toggle-btn ${mode === 'demo' ? 'active' : ''}`}
@@ -515,7 +616,22 @@ export default function App() {
             >
               <span className="mode-dot live"/> LIVE MODE
             </button>
+            <button
+              className={`mode-toggle-btn manual ${mode === 'manual' ? 'active' : ''}`}
+              onClick={() => { setMode('manual'); notify('Switched to Manual Interactive Mode'); }}
+            >
+              <span className="mode-dot manual"/> MANUAL MODE
+            </button>
           </div>
+
+          <button
+            className="btn btn-light btn-xs"
+            style={{ background: '#ecfdf5', color: '#166534', borderColor: '#bbf7d0', fontWeight: 800 }}
+            onClick={() => setShowGuideModal(true)}
+            title="Open 5-step demonstration walkthrough for your presentation"
+          >
+            <GraduationCap size={15}/> Professor Demo Guide
+          </button>
 
           <button className="top-icon" title="Alerts" onClick={() => changePage('Alerts')}>
             <Bell size={19}/>
@@ -584,7 +700,7 @@ export default function App() {
               <div className="panel-heading">
                 <div>
                   <h2>{mode === 'live' ? 'Live Sensor Analytics' : 'Sensor analytics'}</h2>
-                  <p>{mode === 'live' ? `Historical records from SQLite for ${currentFarm(selectedFarmFilter)}` : 'Historical demo readings across your farms'}</p>
+                  <p>{mode === 'live' ? `Historical records from ${dbEngine} for ${currentFarm(selectedFarmFilter)}` : 'Historical demo readings across your farms'}</p>
                 </div>
                 <div className="chart-controls">
                   <select aria-label="Farm selection" value={selectedFarmFilter} onChange={e => setSelectedFarmFilter(e.target.value)}>
@@ -1244,6 +1360,15 @@ export default function App() {
                   </span>
                   <span className="muted-text">{formatRelativeTime(d.last_seen_at)}</span>
                   <div className="table-actions">
+                    {(user.role === 'Admin' || user.role === 'Technician') && (
+                      <button
+                        className="btn btn-outline btn-xs"
+                        onClick={() => handleRotateToken(d.id)}
+                        title="Rotate / generate revocable hardware device token"
+                      >
+                        <Key size={13} /> Rotate Token
+                      </button>
+                    )}
                     {user.role === 'Admin' && <IconButton label="Edit device" onClick={()=>openForm('device', d.id)}><Pencil size={15}/></IconButton>}
                   </div>
                 </div>
@@ -1265,6 +1390,15 @@ export default function App() {
                   </span>
                   <span className="muted-text">{d.lastSeen}</span>
                   <div className="table-actions">
+                    {(user.role === 'Admin' || user.role === 'Technician') && (
+                      <button
+                        className="btn btn-outline btn-xs"
+                        onClick={() => handleRotateToken(d.id)}
+                        title="Rotate / generate revocable hardware device token"
+                      >
+                        <Key size={13} /> Rotate Token
+                      </button>
+                    )}
                     {user.role==='Admin'&&<IconButton label="Edit device" onClick={()=>openForm('device',d.id)}><Pencil size={15}/></IconButton>}
                     {user.role==='Technician'&&<button className="btn btn-light btn-xs" onClick={()=>{setEditId(d.id);setForm({notes:d.notes,status:d.status});setModal('device')}}><Wrench size={14}/> Service</button>}
                   </div>
@@ -1281,6 +1415,14 @@ export default function App() {
             </p>
           </div>
         </section>}
+
+        {/* Database Explorer View (Admin Only) */}
+        {page === 'Database explorer' && user.role === 'Admin' && (
+          <DatabaseExplorer
+            sessionToken={sessionToken}
+            onAuthenticate={() => authenticateUserSession(user)}
+          />
+        )}
 
         {/* Users View */}
         {page === 'Users' && user.role === 'Admin' && <section>
@@ -1372,7 +1514,7 @@ export default function App() {
           <span>© 2026 SmartFarm · Smart Precision Farming</span>
           <span>
             <span className="footer-dot" style={{background: mode === 'live' ? '#2ca459' : '#e0933e'}}/>
-            {mode === 'live' ? 'Live Mode · Connected to SQLite API' : 'Demo Mode · Simulated data'}
+            {mode === 'live' ? `Live Mode · Connected to ${dbEngine}` : 'Demo Mode · Simulated data'}
           </span>
         </footer>
       </div>
@@ -1382,10 +1524,88 @@ export default function App() {
     {modal && modal !== 'reset' && <Modal title={`${editId?'Edit':'Add'} ${modal==='farm'?'farm':modal==='crop'?'crop':modal==='device'?(user.role==='Technician'?'maintenance record':'device'):'user'}`} close={()=>{setModal(null);setEditId(null);setForm({})}}>
       {modal==='farm' && <form className="modal-form" onSubmit={e=>{e.preventDefault();const item:Farm={id:editId||'f-'+Date.now(),name:form.name?.trim()||'',location:form.location?.trim()||'',ownerId:form.ownerId||user.id,area:Number(form.area),soil:form.soil||'Loamy soil',fields:Number(form.fields),crop:form.crop||'Tomato',status:form.status||'Healthy'};if(!item.name||!item.location||item.area<=0||item.fields<1){notify('Enter a valid name, location, area and field count');return}upsert('farms',item)}}><Field label="Farm name"><input required value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Sunrise Farm"/></Field><Field label="Location"><input required value={form.location||''} onChange={e=>setForm({...form,location:e.target.value})} placeholder="Village, district, state"/></Field><div className="form-two"><Field label="Area (hectares)"><input required type="number" min="0.1" step="0.1" value={form.area||''} onChange={e=>setForm({...form,area:e.target.value})}/></Field><Field label="Number of fields"><input required type="number" min="1" value={form.fields||''} onChange={e=>setForm({...form,fields:e.target.value})}/></Field></div><Field label="Soil type"><select value={form.soil||'Black cotton soil'} onChange={e=>setForm({...form,soil:e.target.value})}><option>Black cotton soil</option><option>Red loamy soil</option><option>Alluvial soil</option><option>Laterite soil</option><option>Loamy soil</option></select></Field><Field label="Primary crop"><select value={form.crop||'Tomato'} onChange={e=>setForm({...form,crop:e.target.value})}>{['Tomato','Onion','Soybean','Sugarcane','Cotton','Wheat'].map(c=><option key={c}>{c}</option>)}</select></Field>{user.role==='Admin'&&<Field label="Farm owner"><select value={form.ownerId||'u-pushkar'} onChange={e=>setForm({...form,ownerId:e.target.value})}>{store.users.filter(u=>u.role==='Farmer').map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>}<ModalActions cancel={()=>setModal(null)} submit={editId?'Save changes':'Add farm'}/></form>}
       {modal==='crop' && <form className="modal-form" onSubmit={e=>{e.preventDefault();const item:Crop={id:editId||'c-'+Date.now(),name:form.name||'Tomato',emoji:form.emoji||'🌱',stage:form.stage||'Vegetative',farmId:form.farmId||visibleFarmIds[0]||'f1',moistureMin:Number(form.moistureMin),moistureMax:Number(form.moistureMax),phMin:Number(form.phMin),phMax:Number(form.phMax),note:form.note||''};if(!item.name||item.moistureMin<0||item.moistureMax>100||item.moistureMin>=item.moistureMax||item.phMin>=item.phMax){notify('Check crop name and valid target ranges');return}upsert('crops',item)}}><Field label="Crop name"><select value={form.name||'Tomato'} onChange={e=>setForm({...form,name:e.target.value,emoji:({'Tomato':'🍅','Onion':'🧅','Soybean':'🌱','Sugarcane':'🎋','Cotton':'☁️','Wheat':'🌾'} as Record<string,string>)[e.target.value]})}>{['Tomato','Onion','Soybean','Sugarcane','Cotton','Wheat'].map(c=><option key={c}>{c}</option>)}</select></Field><Field label="Assigned farm"><select value={form.farmId||visibleFarmIds[0]||''} onChange={e=>setForm({...form,farmId:e.target.value})}>{visibleFarms.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></Field><Field label="Growth stage"><select value={form.stage||'Vegetative'} onChange={e=>setForm({...form,stage:e.target.value})}>{['Seedling','Vegetative','Flowering','Fruiting','Bulb development','Boll formation','Harvest ready'].map(c=><option key={c}>{c}</option>)}</select></Field><div className="form-two"><Field label="Moisture minimum (%)"><input type="number" min="0" max="99" required value={form.moistureMin??'35'} onChange={e=>setForm({...form,moistureMin:e.target.value})}/></Field><Field label="Moisture maximum (%)"><input type="number" min="1" max="100" required value={form.moistureMax??'65'} onChange={e=>setForm({...form,moistureMax:e.target.value})}/></Field></div><div className="form-two"><Field label="pH minimum"><input type="number" min="0" max="13.9" step=".1" required value={form.phMin??'5.5'} onChange={e=>setForm({...form,phMin:e.target.value})}/></Field><Field label="pH maximum"><input type="number" min=".1" max="14" step=".1" required value={form.phMax??'7'} onChange={e=>setForm({...form,phMax:e.target.value})}/></Field></div><Field label="Recommendation note"><textarea value={form.note||''} onChange={e=>setForm({...form,note:e.target.value})} rows={3}/></Field><ModalActions cancel={()=>setModal(null)} submit={editId?'Save changes':'Add crop'}/></form>}
-      {modal==='device' && user.role==='Technician' ? <form className="modal-form" onSubmit={e=>{e.preventDefault();const id=editId||'';setStore(prev=>({...prev,devices:prev.devices.map(d=>d.id===id?{...d,status:(form.status as Device['status'])||d.status,notes:form.notes||'',lastSeen:'Just now'}:d)}));setModal(null);notify('Maintenance record saved')}}><p className="muted-text">Update the service status and record the work performed.</p><Field label="Device status"><select value={form.status||'Maintenance'} onChange={e=>setForm({...form,status:e.target.value})}><option>Online</option><option>Offline</option><option>Needs attention</option><option>Maintenance</option></select></Field><Field label="Maintenance notes"><textarea rows={4} value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Inspection findings, repair details..."/></Field><ModalActions cancel={()=>setModal(null)} submit="Save maintenance record"/></form> : modal==='device' && <form className="modal-form" onSubmit={e=>{e.preventDefault();const item:Device={id:editId||form.id||'ESP32-'+Date.now(),name:form.name||'',farmId:form.farmId||visibleFarmIds[0]||'f1',kind:form.kind||'ESP32 + sensor',status:(form.status as Device['status'])||'Online',battery:Number(form.battery||100),lastSeen:form.lastSeen||'Just now',notes:form.notes||''};if(!item.name||!item.id||item.battery<0||item.battery>100){notify('Enter a valid device ID, name and battery value');return}upsert('devices',item)}}><Field label="Device ID"><input required disabled={!!editId} value={form.id||''} onChange={e=>setForm({...form,id:e.target.value})} placeholder="ESP32-PN-005"/></Field><Field label="Device name"><input required value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Soil Sensor Node"/></Field><Field label="Assigned farm"><select value={form.farmId||visibleFarmIds[0]||''} onChange={e=>setForm({...form,farmId:e.target.value})}>{visibleFarms.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></Field><Field label="Device type"><select value={form.kind||'ESP32 + soil probe'} onChange={e=>setForm({...form,kind:e.target.value})}><option>ESP32 + SHT40 + Modbus + Rain</option><option>ESP32 + soil probe</option><option>Temp / humidity</option><option>Multi-sensor</option><option>Weather station</option></select></Field><div className="form-two"><Field label="Status"><select value={form.status||'Online'} onChange={e=>setForm({...form,status:e.target.value})}><option>Online</option><option>Needs attention</option><option>Offline</option><option>Maintenance</option></select></Field><Field label="Battery (%)"><input type="number" min="0" max="100" value={form.battery||'100'} onChange={e=>setForm({...form,battery:e.target.value})}/></Field></div><ModalActions cancel={()=>setModal(null)} submit={editId?'Save changes':'Register device'}/></form>}
+      {modal==='device' && user.role==='Technician' ? <form className="modal-form" onSubmit={e=>{e.preventDefault();const id=editId||'';setStore(prev=>({...prev,devices:prev.devices.map(d=>d.id===id?{...d,status:(form.status as Device['status'])||d.status,notes:form.notes||'',lastSeen:'Just now'}:d)}));setModal(null);notify('Maintenance record saved')}}><p className="muted-text">Update the service status and record the work performed.</p><Field label="Device status"><select value={form.status||'Maintenance'} onChange={e=>setForm({...form,status:e.target.value})}><option>Online</option><option>Offline</option><option>Needs attention</option><option>Maintenance</option></select></Field><Field label="Maintenance notes"><textarea rows={4} value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Inspection findings, repair details..."/></Field><ModalActions cancel={()=>setModal(null)} submit="Save maintenance record"/></form> : modal==='device' && <form className="modal-form" onSubmit={async e=>{
+        e.preventDefault();
+        const item:Device={id:editId||form.id||'ESP32-'+Date.now(),name:form.name||'',farmId:form.farmId||visibleFarmIds[0]||'f1',kind:form.kind||'ESP32 + sensor',status:(form.status as Device['status'])||'Online',battery:Number(form.battery||100),lastSeen:form.lastSeen||'Just now',notes:form.notes||''};
+        if(!item.name||!item.id||item.battery<0||item.battery>100){notify('Enter a valid device ID, name and battery value');return}
+        
+        // If registering a new device in live or production database as Admin:
+        if (!editId && user.role === 'Admin') {
+          let token = sessionToken;
+          if (!token && user) token = await authenticateUserSession(user);
+          if (token) {
+            try {
+              const res = await fetch('/api/devices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ id: item.id, name: item.name, farmId: item.farmId, hardwareType: item.kind })
+              });
+              if (res.ok) {
+                const resJson = await res.json() as { deviceToken?: string };
+                if (resJson.deviceToken) {
+                  setTokenModal({ deviceId: item.id, token: resJson.deviceToken });
+                }
+              }
+            } catch { /* proceed with store update */ }
+          }
+        }
+        upsert('devices',item);
+      }}><Field label="Device ID"><input required disabled={!!editId} value={form.id||''} onChange={e=>setForm({...form,id:e.target.value})} placeholder="ESP32-PN-005"/></Field><Field label="Device name"><input required value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Soil Sensor Node"/></Field><Field label="Assigned farm"><select value={form.farmId||visibleFarmIds[0]||''} onChange={e=>setForm({...form,farmId:e.target.value})}>{visibleFarms.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></Field><Field label="Device type"><select value={form.kind||'ESP32 + soil probe'} onChange={e=>setForm({...form,kind:e.target.value})}><option>ESP32 + SHT40 + Modbus + Rain</option><option>ESP32 + soil probe</option><option>Temp / humidity</option><option>Multi-sensor</option><option>Weather station</option></select></Field><div className="form-two"><Field label="Status"><select value={form.status||'Online'} onChange={e=>setForm({...form,status:e.target.value})}><option>Online</option><option>Needs attention</option><option>Offline</option><option>Maintenance</option></select></Field><Field label="Battery (%)"><input type="number" min="0" max="100" value={form.battery||'100'} onChange={e=>setForm({...form,battery:e.target.value})}/></Field></div><ModalActions cancel={()=>setModal(null)} submit={editId?'Save changes':'Register device'}/></form>}
       {modal==='user' && <form className="modal-form" onSubmit={e=>{e.preventDefault();const name=form.name?.trim()||'';const role=(form.role||'Farmer') as Role;const item:User={id:editId||'u-'+Date.now(),name,role,description:form.description||roleLabels[role],farmIds:form.farmIds?form.farmIds.split(',').map(x=>x.trim()).filter(Boolean):[],active:form.active!=='false',initials:initials(name)};if(!name){notify('Name is required');return}upsert('users',item)}}><Field label="Full name"><input required value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Farmer name"/></Field><Field label="Role"><select value={form.role||'Farmer'} onChange={e=>setForm({...form,role:e.target.value})}>{(['Admin','Farmer','Partner','Technician'] as Role[]).map(r=><option key={r}>{r}</option>)}</select></Field><Field label="Account description"><input value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Purpose of this account"/></Field><Field label="Assigned farm IDs (comma separated)"><input value={form.farmIds||''} onChange={e=>setForm({...form,farmIds:e.target.value})} placeholder="f1, f2"/></Field><Field label="Status"><select value={form.active||'true'} onChange={e=>setForm({...form,active:e.target.value})}><option value="true">Active</option><option value="false">Inactive</option></select></Field><ModalActions cancel={()=>setModal(null)} submit={editId?'Save changes':'Create account'}/></form>}
     </Modal>}
     {modal==='reset' && <Modal title="Reset demo data?" close={()=>setModal(null)}><div className="reset-content"><div className="reset-icon"><RefreshCw size={22}/></div><p>This restores the original demo users, farms, crops, devices, alerts, thresholds and preferences. Your local edits will be lost.</p><div className="modal-actions"><button className="btn btn-light" onClick={()=>setModal(null)}>Cancel</button><button className="btn btn-danger" onClick={resetData}>Reset demo data</button></div></div></Modal>}
+
+    {/* Revocable Device Token Modal */}
+    {tokenModal && (
+      <Modal title={`Device Token: ${tokenModal.deviceId}`} close={() => setTokenModal(null)}>
+        <div style={{ display: 'grid', gap: '14px' }}>
+          <div className="note-box" style={{ background: '#edf7ee', borderColor: '#cce8d0', color: '#1e4c2b' }}>
+            <ShieldCheck size={22} style={{ flex: 'none', color: '#2ca459' }} />
+            <div>
+              <strong>Revocable Hardware Bearer Token Generated</strong>
+              <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#386043' }}>
+                Copy this token now. For security, it is stored as a SHA-256 hash and cannot be retrieved again.
+              </p>
+            </div>
+          </div>
+
+          <Field label="Device Token (Header: X-Device-Token)">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                readOnly
+                value={tokenModal.token}
+                style={{ fontFamily: 'monospace', fontWeight: 600, background: '#f5f7f4' }}
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(tokenModal.token);
+                  setTokenCopied(true);
+                  setTimeout(() => setTokenCopied(false), 2500);
+                }}
+              >
+                {tokenCopied ? <Check size={14} /> : <Copy size={14} />} {tokenCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </Field>
+
+          <div style={{ background: '#f8faf6', padding: '12px 14px', borderRadius: '8px', fontSize: '11px', color: '#495a4c', border: '1px solid #e5ebe2' }}>
+            <strong>ESP32 Firmware Configuration:</strong>
+            <p style={{ margin: '5px 0 0', lineHeight: 1.6 }}>
+              1. In <code>firmware/esp32_smartfarm/config.h</code>, paste this token:<br />
+              <code>#define DEVICE_TOKEN "{tokenModal.token}"</code><br />
+              2. Ensure <code>#define DEVICE_ID "{tokenModal.deviceId}"</code><br />
+              3. Set your local Wi-Fi credentials in <code>config.h</code> and re-flash the ESP32.
+            </p>
+          </div>
+
+          <div className="modal-actions">
+            <button className="btn btn-primary" onClick={() => setTokenModal(null)}>Done</button>
+          </div>
+        </div>
+      </Modal>
+    )}
     {toast && <div className="toast"><CheckCircle2 size={18}/>{toast}<button onClick={()=>setToast('')} aria-label="Dismiss notification"><X size={15}/></button></div>}
   </div>
 }

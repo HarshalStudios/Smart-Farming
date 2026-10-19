@@ -7,6 +7,8 @@ import authRoutes from './server/routes/authRoutes';
 import deviceRoutes from './server/routes/deviceRoutes';
 import telemetryRoutes from './server/routes/telemetryRoutes';
 import farmRoutes from './server/routes/farmRoutes';
+import dbExplorerRoutes from './server/routes/dbExplorerRoutes';
+import cropAnalysisRoutes from './server/routes/cropAnalysisRoutes';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -98,6 +100,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/v1/telemetry', telemetryRoutes);
 app.use('/api/farms', farmRoutes);
+app.use('/api/v1/crop-analyses', cropAnalysisRoutes);
+app.use('/api/admin/database', dbExplorerRoutes);
 
 // Unmatched API requests must return 404 JSON, never SPA HTML
 app.use('/api', (req, res) => {
